@@ -2,9 +2,114 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Colour tokens as "r g b" so Tailwind's /opacity modifiers work. */
+:root {
+  color-scheme: light;
+  --c-background: 250 246 240;
+  --c-on-background: 46 50 48;
+  --c-surface: 250 246 240;
+  --c-surface-dim: 219 215 207;
+  --c-surface-bright: 253 251 247;
+  --c-surface-container-lowest: 255 255 255;
+  --c-surface-container-low: 245 241 234;
+  --c-surface-container: 240 236 228;
+  --c-surface-container-high: 234 230 222;
+  --c-surface-container-highest: 228 224 216;
+  --c-surface-variant: 228 224 216;
+  --c-on-surface: 38 42 40;
+  --c-on-surface-variant: 96 101 96;
+  --c-outline: 116 121 110;
+  --c-outline-variant: 222 218 209;
+  --c-primary: 61 110 76;
+  --c-on-primary: 255 255 255;
+  --c-primary-container: 220 236 224;
+  --c-on-primary-container: 30 74 44;
+  --c-secondary: 107 99 88;
+  --c-tertiary: 138 104 32;
+  --c-tertiary-container: 250 236 200;
+  --c-on-tertiary-container: 102 74 14;
+  --c-error: 184 50 48;
+  --c-error-container: 255 228 226;
+  --c-on-error-container: 140 24 22;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --c-background: 22 25 23;
+    --c-on-background: 228 230 225;
+    --c-surface: 22 25 23;
+    --c-surface-dim: 16 19 17;
+    --c-surface-bright: 40 45 41;
+    --c-surface-container-lowest: 28 32 29;
+    --c-surface-container-low: 31 36 32;
+    --c-surface-container: 36 42 38;
+    --c-surface-container-high: 44 51 46;
+    --c-surface-container-highest: 53 61 55;
+    --c-surface-variant: 53 61 55;
+    --c-on-surface: 230 233 228;
+    --c-on-surface-variant: 172 180 170;
+    --c-outline: 138 145 136;
+    --c-outline-variant: 56 64 58;
+    --c-primary: 142 207 158;
+    --c-on-primary: 12 52 26;
+    --c-primary-container: 36 72 47;
+    --c-on-primary-container: 200 232 208;
+    --c-secondary: 201 194 182;
+    --c-tertiary: 220 196 142;
+    --c-tertiary-container: 74 58 22;
+    --c-on-tertiary-container: 248 224 168;
+    --c-error: 255 180 171;
+    --c-error-container: 92 21 20;
+    --c-on-error-container: 255 218 214;
+  }
+}
+
+@layer base {
+  body {
+    @apply bg-background text-on-surface;
+  }
+  :focus-visible {
+    @apply outline-none ring-2 ring-primary/60 ring-offset-1 ring-offset-background;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-md px-3.5 h-9 text-sm font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none whitespace-nowrap;
+  }
+  .btn-primary {
+    @apply btn bg-primary text-on-primary hover:bg-primary/90 shadow-sm;
+  }
+  .btn-secondary {
+    @apply btn border border-outline-variant bg-surface-container-lowest text-on-surface hover:bg-surface-container;
+  }
+  .btn-ghost {
+    @apply btn text-on-surface-variant hover:bg-surface-container hover:text-on-surface;
+  }
+  .btn-danger {
+    @apply btn bg-error text-white hover:bg-error/90 dark:text-on-error-container dark:bg-error-container;
+  }
+  .icon-btn {
+    @apply inline-flex items-center justify-center rounded-md w-9 h-9 text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-colors disabled:opacity-40 disabled:pointer-events-none;
+  }
+  .field {
+    @apply w-full rounded-md border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface placeholder:text-on-surface-variant/60 transition-colors focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20;
+  }
+  .field-label {
+    @apply block text-xs font-medium text-on-surface-variant mb-1.5;
+  }
+  .card {
+    @apply rounded-xl border border-outline-variant bg-surface-container-lowest;
+  }
+}
+
 @layer utilities {
   .material-symbols-outlined {
     font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    font-size: 20px;
+    line-height: 1;
+    user-select: none;
   }
   .material-symbols-outlined[data-weight="fill"] {
     font-variation-settings: 'FILL' 1;
@@ -19,8 +124,88 @@
   }
 }
 
-/* Custom scrollbar for IDE feel */
-::-webkit-scrollbar { width: 8px; height: 8px; }
+/* Scrollbars */
+::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #d8dadc; border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: #c6c6cd; }
+::-webkit-scrollbar-thumb { background: rgb(var(--c-outline-variant)); border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background-color: rgb(var(--c-outline)); }
+
+/* ---------- Editor content ---------- */
+.ProseMirror {
+  outline: none;
+  min-height: 50vh;
+}
+.ProseMirror > * + * { margin-top: 0; }
+.ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+  color: rgb(var(--c-on-surface-variant) / 0.5);
+}
+.ProseMirror img {
+  border-radius: 6px;
+  max-width: 100%;
+  height: auto;
+  display: inline-block;
+  margin: 0;
+}
+.ProseMirror img.ProseMirror-selectednode,
+.ProseMirror .image-row.ProseMirror-selectednode {
+  outline: 3px solid rgb(var(--c-primary));
+  outline-offset: 2px;
+}
+.ProseMirror .image-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+  margin: 1.5em 0;
+  padding: 6px;
+  border-radius: 10px;
+  border: 1px dashed rgb(var(--c-outline-variant));
+}
+.ProseMirror .image-row img {
+  flex: 1 1 0;
+  min-width: 0;
+  width: 100%;
+}
+.ProseMirror .shortcode-chip {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.8em;
+  padding: 0.1em 0.45em;
+  border-radius: 6px;
+  background: rgb(var(--c-tertiary-container));
+  color: rgb(var(--c-on-tertiary-container));
+  white-space: nowrap;
+}
+.ProseMirror li[data-checked] {
+  list-style: none;
+  display: flex;
+  gap: 0.5em;
+  align-items: flex-start;
+  margin-left: -1.4em;
+}
+.ProseMirror li[data-checked] > .li-content { flex: 1; min-width: 0; }
+.ProseMirror li[data-checked] > .li-content > p { margin: 0; }
+.ProseMirror li[data-checked="true"] > .li-content { color: rgb(var(--c-on-surface-variant)); }
+.ProseMirror .li-checkbox {
+  margin-top: 0.45em;
+  width: 1em;
+  height: 1em;
+  accent-color: rgb(var(--c-primary));
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.ProseMirror ul[data-tight="true"] > li > .li-content > p,
+.ProseMirror ul[data-tight="true"] > li > p { margin: 0.15em 0; }
+
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slideIn { from { transform: translateX(-100%); } to { transform: translateX(0); } }
+@keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
+
+/* ProseMirror adds an invisible separator <img> and <br> after inline nodes; keep them out of the row's flex layout. */
+.ProseMirror .image-row img.ProseMirror-separator,
+.ProseMirror .image-row br.ProseMirror-trailingBreak { display: none; }
+.ProseMirror:focus-visible { box-shadow: none; outline: none; --tw-ring-shadow: 0 0 #0000; }
+.ProseMirror ul[data-tight="true"] > li,
+.ProseMirror ol[data-tight="true"] > li { margin-top: 0.15em; margin-bottom: 0.15em; }

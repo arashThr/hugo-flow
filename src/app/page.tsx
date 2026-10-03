@@ -1,153 +1,116 @@
 "use client";
 
+import { Suspense, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import { useSettings } from "@/components/SettingsProvider";
-import { useEffect, useState } from "react";
+import { useSite } from "@/components/SiteProvider";
 import { LandingPage } from "@/components/dashboard/LandingPage";
 import { SettingsView } from "@/components/dashboard/SettingsView";
-import { SideNavBar } from "@/components/dashboard/SideNavBar";
-import { MobileHeader } from "@/components/dashboard/MobileHeader";
-import { PostsList } from "@/components/dashboard/PostsList";
+import { AppSidebar, type DashboardView } from "@/components/dashboard/AppSidebar";
+import { ContentList } from "@/components/dashboard/ContentList";
+import { MediaLibrary } from "@/components/dashboard/MediaLibrary";
+import { Icon, Spinner } from "@/components/ui";
+
+function FullScreenLoading() {
+  return (
+    <div className="flex h-screen w-full items-center justify-center gap-2 text-on-surface-variant">
+      <Spinner /> Loading…
+    </div>
+  );
+}
 
 export default function Home() {
+  return (
+    <Suspense fallback={<FullScreenLoading />}>
+      <Dashboard />
+    </Suspense>
+  );
+}
+
+function Dashboard() {
   const { data: session, status } = useSession();
   const { settings, updateSettings, isLoaded } = useSettings();
-  const [repos, setRepos] = useState<any[]>([]);
-  const [loadingRepos, setLoadingRepos] = useState(false);
-  const [tree, setTree] = useState<any[]>([]);
-  const [loadingTree, setLoadingTree] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
-  
-  const [searchQuery, setSearchQuery] = useState("");
-  const [visibleCount, setVisibleCount] = useState(20);
-  const [sortOrder, setSortOrder] = useState("Newest First");
+  const { site, loading, error, refresh } = useSite();
+  const searchParams = useSearchParams();
+  const [menuOpen, setMenuOpen] = useState(false);
 
-  useEffect(() => {
-    if (session) {
-      fetchRepos();
-    }
-  }, [session]);
+  if (status === "loading" || !isLoaded) return <FullScreenLoading />;
+  if (!session) return <LandingPage />;
 
-  useEffect(() => {
-    if (session && settings.repository) {
-      fetchTree();
-    }
-  }, [session, settings.repository]);
+  const sections = Array.from(new Set(site?.entries.map((e) => e.section) ?? [])).sort();
 
-  const fetchRepos = async () => {
-    setLoadingRepos(true);
-    try {
-      const res = await fetch("/api/github/repos");
-      const data = await res.json();
-      if (data.repos) {
-        setRepos(data.repos);
-      }
-    } finally {
-      setLoadingRepos(false);
-    }
-  };
-
-  const fetchTree = async () => {
-    setLoadingTree(true);
-    const [owner, repo] = settings.repository.split("/");
-    try {
-      const res = await fetch(`/api/github/tree?owner=${owner}&repo=${repo}`);
-      const data = await res.json();
-      if (data.tree) {
-        setTree(data.tree);
-      }
-    } finally {
-      setLoadingTree(false);
-    }
-  };
-
-  if (status === "loading" || !isLoaded) {
-    return <div className="flex h-screen w-full items-center justify-center text-on-surface-variant font-body-md">Loading...</div>;
-  }
-
-  // --- Landing Page ---
-  if (!session) {
-    return <LandingPage />;
-  }
-
-  // --- Authenticated Repo Selection (Initial Setup) ---
   if (!settings.repository) {
     return (
-      <div className="flex h-screen items-center justify-center bg-background p-6">
-        <SettingsView 
-          repos={repos}
-          loadingRepos={loadingRepos}
-          settings={settings}
-          updateSettings={updateSettings}
-          setShowSettings={setShowSettings}
-          isInitialSetup={true}
-        />
+      <div className="min-h-screen flex flex-col items-center justify-center p-4 sm:p-6 gap-6">
+        <div className="text-center">
+          <div className="mx-auto mb-4 w-11 h-11 rounded-xl bg-primary text-on-primary flex items-center justify-center">
+            <Icon name="draw" />
+          </div>
+          <h1 className="font-display text-2xl font-bold text-on-surface">Pick your Hugo site</h1>
+          <p className="text-on-surface-variant mt-1">Choose the repository you want to write in.</p>
+        </div>
+        <div className="w-full max-w-lg">
+          <SettingsView settings={settings} updateSettings={updateSettings} sections={sections} isInitialSetup />
+        </div>
       </div>
     );
   }
 
-  // --- Authenticated Dashboard ---
-  const allPosts = tree.filter((item) => 
-    item.path.startsWith(settings.contentPath) && 
-    item.type === "blob" && 
-    item.path.endsWith(".md")
-  ).sort((a, b) => {
-    if (sortOrder === "Newest First") return b.path.localeCompare(a.path);
-    if (sortOrder === "Oldest First") return a.path.localeCompare(b.path);
-    return b.path.localeCompare(a.path);
-  });
-
-  const filteredPosts = allPosts.filter(post => 
-    post.path.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-  
-  const visiblePosts = filteredPosts.slice(0, visibleCount);
+  const viewParam = searchParams.get("view");
+  const view: DashboardView =
+    viewParam === "media"
+      ? { kind: "media" }
+      : viewParam === "settings"
+        ? { kind: "settings" }
+        : { kind: "content", section: searchParams.get("section") || "all" };
 
   return (
-    <div className="h-screen flex overflow-hidden">
-      {/* SideNavBar */}
-      <SideNavBar 
-        session={session} 
-        showSettings={showSettings} 
-        setShowSettings={setShowSettings} 
-        signOut={signOut} 
+    <div className="min-h-screen md:pl-64">
+      <AppSidebar
+        session={session}
+        settings={settings}
+        site={site}
+        view={view}
+        open={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        onSignOut={() => signOut()}
       />
 
-      {/* Main Content Area */}
-      <main className="flex-1 flex flex-col md:ml-64 bg-surface h-full overflow-hidden">
-        {/* TopNavBar Mobile */}
-        <MobileHeader 
-          session={session} 
-          setShowSettings={setShowSettings} 
-          signOut={signOut} 
-        />
+      {/* Mobile header */}
+      <header className="md:hidden sticky top-0 z-30 flex items-center gap-2 h-14 px-3 bg-background/90 backdrop-blur border-b border-outline-variant">
+        <button className="icon-btn" onClick={() => setMenuOpen(true)} aria-label="Open menu">
+          <Icon name="menu" />
+        </button>
+        <span className="font-display font-bold text-on-surface truncate">{settings.repository.split("/")[1]}</span>
+      </header>
 
-        {/* Page Content Canvas */}
-        <div className="flex-1 overflow-y-auto p-[24px] lg:p-[48px]">
-            <div className="max-w-[1200px] mx-auto">
-                {showSettings ? (
-                  <SettingsView 
-                    repos={repos}
-                    loadingRepos={loadingRepos}
-                    settings={settings}
-                    updateSettings={updateSettings}
-                    setShowSettings={setShowSettings}
-                  />
-                ) : (
-                  <PostsList 
-                    settings={settings}
-                    searchQuery={searchQuery}
-                    setSearchQuery={setSearchQuery}
-                    sortOrder={sortOrder}
-                    setSortOrder={setSortOrder}
-                    loadingTree={loadingTree}
-                    filteredPosts={filteredPosts}
-                    visiblePosts={visiblePosts}
-                    loadMore={() => setVisibleCount(v => v + 20)}
-                  />
-                )}
-            </div>
-        </div>
+      <main className="px-4 py-6 sm:px-8 sm:py-10">
+        {error && (
+          <div className="max-w-5xl mx-auto mb-5 flex items-center gap-3 rounded-xl bg-error-container text-on-error-container px-4 py-3 text-sm">
+            <Icon name="error" />
+            <span className="flex-1">{error}</span>
+            <button className="btn-secondary !h-8" onClick={refresh}>
+              Retry
+            </button>
+          </div>
+        )}
+
+        {view.kind === "settings" ? (
+          <SettingsView settings={settings} updateSettings={updateSettings} sections={sections} />
+        ) : view.kind === "media" ? (
+          <MediaLibrary media={site?.media ?? []} settings={settings} branch={site?.branch ?? settings.branch} loading={loading} onChanged={refresh} />
+        ) : (
+          <ContentList
+            key={view.section}
+            section={view.section}
+            entries={site?.entries ?? []}
+            settings={settings}
+            loading={loading}
+            repoUrl={`https://github.com/${settings.repository}`}
+            branch={site?.branch ?? (settings.branch || "main")}
+          />
+        )}
       </main>
     </div>
   );
