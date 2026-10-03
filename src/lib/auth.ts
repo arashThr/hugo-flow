@@ -1,4 +1,4 @@
-import { AuthOptions } from "next-auth";
+import { AuthOptions, getServerSession } from "next-auth";
 import GithubProvider from "next-auth/providers/github";
 
 export const authOptions: AuthOptions = {
@@ -23,9 +23,13 @@ export const authOptions: AuthOptions = {
     },
     async session({ session, token }) {
       // Send properties to the client, like an access_token from a provider.
-      // @ts-ignore
-      session.accessToken = token.accessToken as string;
+      session.accessToken = token.accessToken;
       return session;
     },
   },
 };
+
+export async function getAccessToken(): Promise<string | null> {
+  const session = await getServerSession(authOptions);
+  return session?.accessToken ?? null;
+}

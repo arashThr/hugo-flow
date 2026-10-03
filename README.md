@@ -5,10 +5,14 @@ A web-based front-end interface for Hugo static blogs hosted on GitHub.
 **Start writing blog posts:** [hugo-flow.arashtaher.com/](https://hugo-flow.arashtaher.com/)
 
 ## Features
-- **GitHub Integration:** Commit files directly to your repository via the GitHub API.
-- **Dynamic Configuration:** Select your repository and paths dynamically via the UI.
-- **Dual Editor Mode:** Switch seamlessly between a WYSIWYG Rich Text editor and a raw Markdown editor.
-- **Image Uploads:** Upload images and have them automatically pushed as base64 blobs alongside your markdown post.
+- **GitHub Integration:** Commit files directly to your repository via the GitHub API, with conflict detection so you never overwrite newer changes.
+- **Edit any page:** Browse every section under `content/` (posts, lists, section `_index.md` pages, top-level pages) and edit them in place. TOML, YAML and JSON front matter are preserved, including fields the editor doesn't know about.
+- **Dual Editor Mode:** Switch between a WYSIWYG editor and raw Markdown. Checklists, Hugo shortcodes and code blocks round-trip safely, and saves only change the lines you edited.
+- **Images:** Upload, drag in or paste images. They are converted to WebP and stay in the browser until you save, and only images still in the post are committed. Put several images side by side in a row.
+- **Media library:** See every image in your image folder, which pages use it, and clean up unused ones.
+- **Drafts:** Toggle Hugo's `draft` flag, and unsaved work is kept locally so a closed tab doesn't lose it.
+
+> Image rows are saved as HTML, so your Hugo config needs `unsafe = true` under `[markup.goldmark.renderer]`. The editor warns you if it isn't set.
 
 ## Philosophy & Niche
 
