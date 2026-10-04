@@ -1,0 +1,9 @@
+# Never send secrets into the build: the deploy checkout holds the production .env.
+.env*
+
+.git
+.github
+node_modules
+.next
+deploy
+*.md

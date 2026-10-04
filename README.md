@@ -75,22 +75,47 @@ GITHUB_ID=your_production_github_id
 GITHUB_SECRET=your_production_github_secret
 ```
 
-### 3. Run with Docker Compose
-Start the application in the background:
+### 3. Get the code onto the server
+Clone the repository on the server and put the `.env` from step 2 inside it:
 ```bash
-docker-compose up -d --build
+git clone https://github.com/arashThr/hugo-flow.git ~/repos/hugo-flow
 ```
-This will expose the app on port `3000` of your host machine.
 
-### 4. Setup Caddy Reverse Proxy
-If you are using Caddy to serve your domain, simply add this block to your `Caddyfile`:
+### 4. Deploy
+Images are built by GitHub Actions (`.github/workflows/deploy.yml`) on every push to `main`, and pushed to `ghcr.io/arashthr/hugo-flow`. The server never builds; it only pulls and restarts:
+```bash
+~/repos/hugo-flow/deploy/deploy.sh               # latest build of main
+~/repos/hugo-flow/deploy/deploy.sh sha-1a2b3c4   # a specific commit
+~/repos/hugo-flow/deploy/deploy.sh previous      # undo the last deploy
+```
+`deploy.sh` pulls the latest `compose.yml`, starts the new image and waits for its health check. If the new version doesn't come up, it switches back to the previous image automatically.
+
+The app listens on port `9000` of the host. Without CI, `docker compose up -d --build` still builds and runs everything on the server.
+
+> The first image GitHub publishes is private. Either make it public (GitHub → your profile → Packages → hugo-flow → Package settings → Change visibility), or log the server in once with `docker login ghcr.io` using a token with the `read:packages` scope.
+
+### 5. Deploy automatically after each push (optional)
+The workflow can trigger `deploy.sh` over SSH when a build finishes. The key it uses can only run `deploy.sh`, nothing else.
+
+1. On any machine, create a key just for this: `ssh-keygen -t ed25519 -N "" -f hugo-flow-deploy`
+2. On the server, add the public key to `~/.ssh/authorized_keys`, locked to the deploy script:
+   ```
+   command="$HOME/repos/hugo-flow/deploy/deploy.sh",restrict ssh-ed25519 AAAA... hugo-flow-deploy
+   ```
+   (`authorized_keys` doesn't expand `$HOME`, so write the full path.)
+3. In the GitHub repository → Settings → Secrets and variables → Actions, add:
+   - **Secrets:** `DEPLOY_SSH_KEY` (contents of the private key file) and `DEPLOY_KNOWN_HOSTS` (output of `ssh-keyscan your-server`)
+   - **Variables:** `DEPLOY_HOST`, `DEPLOY_USER`, and `DEPLOY_PORT` if SSH isn't on port 22
+
+From then on, merging to `main` builds the image and deploys it. If `DEPLOY_HOST` isn't set, the workflow only builds images.
+
+### 6. Setup Caddy Reverse Proxy
+If you are using Caddy to serve your domain, add this block to your `Caddyfile`:
 
 ```caddyfile
 your-domain.com {
-    reverse_proxy localhost:3000
+    reverse_proxy localhost:9000
 }
 ```
 
 Reload Caddy (`caddy reload`), and your application will be securely available over HTTPS!
-
-+++
