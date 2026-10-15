@@ -11,6 +11,8 @@ import { AppSidebar, type DashboardView } from "@/components/dashboard/AppSideba
 import { ContentList } from "@/components/dashboard/ContentList";
 import { MediaLibrary } from "@/components/dashboard/MediaLibrary";
 import { Icon, Spinner } from "@/components/ui";
+import { useArchetypes } from "@/components/useArchetypes";
+import Link from "next/link";
 
 function FullScreenLoading() {
   return (
@@ -34,6 +36,7 @@ function Dashboard() {
   const { site, loading, error, refresh } = useSite();
   const searchParams = useSearchParams();
   const [menuOpen, setMenuOpen] = useState(false);
+  const hasArchetypes = useArchetypes().archetypes.length > 0;
 
   if (status === "loading" || !isLoaded) return <FullScreenLoading />;
   if (!session) return <LandingPage />;
@@ -83,6 +86,11 @@ function Dashboard() {
           <Icon name="menu" />
         </button>
         <span className="font-display font-bold text-on-surface truncate">{settings.repository.split("/")[1]}</span>
+        {hasArchetypes && (
+          <Link href="/quick" className="icon-btn ml-auto" aria-label="Quick capture" title="Quick capture">
+            <Icon name="bolt" />
+          </Link>
+        )}
       </header>
 
       <main className="px-4 py-6 sm:px-8 sm:py-10">
@@ -109,6 +117,7 @@ function Dashboard() {
             loading={loading}
             repoUrl={`https://github.com/${settings.repository}`}
             branch={site?.branch ?? (settings.branch || "main")}
+            onChanged={refresh}
           />
         )}
       </main>

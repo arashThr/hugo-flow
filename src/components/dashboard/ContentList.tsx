@@ -3,8 +3,12 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Badge, Icon, Spinner } from "@/components/ui";
-import { fileLabel, formatDate, sectionLabel, type ContentEntry } from "@/lib/content";
+import { fileLabel, formatDate, sectionLabel, sectionName, type ContentEntry } from "@/lib/content";
 import type { Settings } from "@/components/SettingsProvider";
+import { useToast } from "@/components/Toast";
+import { useArchetypes } from "@/components/useArchetypes";
+import { archetypeCommitMessage, archetypeSection } from "@/lib/archetypes";
+import { toggleDraft } from "@/lib/save";
 
 type Filter = "all" | "published" | "drafts";
 type Sort = "newest" | "oldest" | "title";
@@ -16,15 +20,20 @@ interface Props {
   loading: boolean;
   repoUrl: string;
   branch: string;
+  onChanged: () => Promise<void>;
 }
 
 const PAGE_SIZE = 40;
 
-export function ContentList({ section, entries, settings, loading, repoUrl, branch }: Props) {
+export function ContentList({ section, entries, settings, loading, repoUrl, branch, onChanged }: Props) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
+  const [kind, setKind] = useState<string>("all");
   const [sort, setSort] = useState<Sort>("newest");
   const [visible, setVisible] = useState(PAGE_SIZE);
+  const [toggling, setToggling] = useState<string | null>(null);
+  const { archetypes, byName } = useArchetypes();
+  const toast = useToast();
 
   const isSection = section !== "all" && section !== "drafts";
   const title = section === "all" ? "All content" : section === "drafts" ? "Drafts" : sectionLabel(section, settings.contentDir);
@@ -41,11 +50,22 @@ export function ContentList({ section, entries, settings, loading, repoUrl, bran
     [entries, section]
   );
 
+  // Kinds (archetypes) present here. The filter only appears when there's more than one to choose from.
+  const kinds = useMemo(() => {
+    const names = new Set(scoped.map((e) => e.archetype).filter((a): a is string => !!a));
+    return archetypes.filter((a) => names.has(a.name));
+  }, [scoped, archetypes]);
+  const showKinds = kinds.length >= 2;
+
+  // "New TIL", "New essay": archetypes whose posts live here (or all of them on the overview).
+  const creatable = archetypes.filter((a) => section === "all" || archetypeSection(a.name, entries, settings.postsSection) === section);
+
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
     const list = scoped.filter((e) => {
       if (filter === "drafts" && !e.draft) return false;
       if (filter === "published" && e.draft) return false;
+      if (showKinds && kind !== "all" && e.archetype !== kind) return false;
       if (!q) return true;
       return e.title.toLowerCase().includes(q) || e.path.toLowerCase().includes(q) || e.tags.some((t) => t.toLowerCase().includes(q));
     });
@@ -57,7 +77,32 @@ export function ContentList({ section, entries, settings, loading, repoUrl, bran
       const diff = sort === "newest" ? time(b) - time(a) : time(a) - time(b);
       return diff || (a.title || a.path).localeCompare(b.title || b.path);
     });
-  }, [scoped, query, filter, sort, isSection]);
+  }, [scoped, query, filter, sort, isSection, showKinds, kind]);
+
+  const flipDraft = async (entry: ContentEntry) => {
+    setToggling(entry.path);
+    const label = byName(entry.archetype)?.label;
+    const title = entry.title || fileLabel(entry.path);
+    try {
+      await toggleDraft({
+        repository: settings.repository,
+        branch,
+        path: entry.path,
+        message: (draft) =>
+          label
+            ? archetypeCommitMessage(draft ? "unpublish" : "publish", sectionName(entry.section, settings.contentDir), label, title)
+            : draft
+              ? `Mark "${title}" as draft`
+              : `Publish "${title}"`,
+      });
+      await onChanged();
+      toast(entry.draft ? `Published "${title}"` : `"${title}" is now a draft`);
+    } catch (e) {
+      toast((e as Error).message, "error");
+    } finally {
+      setToggling(null);
+    }
+  };
 
   const draftCount = scoped.filter((e) => e.draft).length;
 
@@ -76,10 +121,26 @@ export function ContentList({ section, entries, settings, loading, repoUrl, bran
           </p>
         </div>
         {section !== "drafts" && (
-          <Link href={`/editor?new=${encodeURIComponent(newTarget)}`} className="btn-primary self-start sm:self-auto">
-            <Icon name="add" className="!text-[19px]" />
-            {isPosts || section === "all" ? "New post" : `New in ${sectionLabel(section, settings.contentDir)}`}
-          </Link>
+          <div className="flex flex-wrap gap-2 self-start sm:self-auto sm:justify-end">
+            {creatable.length > 0 && (
+              <Link href={`/quick?archetype=${encodeURIComponent(creatable[0].name)}`} className="btn-secondary" title="Quick capture: title, body, tags">
+                <Icon name="bolt" className="!text-[18px]" /> Quick
+              </Link>
+            )}
+            {creatable.map((a) => (
+              <Link
+                key={a.name}
+                href={`/editor?new=${encodeURIComponent(archetypeSection(a.name, entries, isSection ? section : settings.postsSection))}&archetype=${encodeURIComponent(a.name)}`}
+                className="btn-secondary"
+              >
+                <Icon name="add" className="!text-[18px]" /> New {a.label}
+              </Link>
+            ))}
+            <Link href={`/editor?new=${encodeURIComponent(newTarget)}`} className="btn-primary">
+              <Icon name="add" className="!text-[19px]" />
+              {isPosts || section === "all" ? "New post" : `New in ${sectionLabel(section, settings.contentDir)}`}
+            </Link>
+          </div>
         )}
       </header>
 
@@ -96,7 +157,26 @@ export function ContentList({ section, entries, settings, loading, repoUrl, bran
             }}
           />
         </label>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          {showKinds && (
+            <div className="flex rounded-md border border-outline-variant bg-surface-container-lowest p-0.5 h-10" role="group" aria-label="Kind">
+              {[{ name: "all", label: "All kinds" }, ...kinds].map((k) => (
+                <button
+                  key={k.name}
+                  onClick={() => {
+                    setKind(k.name);
+                    setVisible(PAGE_SIZE);
+                  }}
+                  aria-pressed={kind === k.name}
+                  className={`px-3 rounded text-sm transition-colors ${
+                    kind === k.name ? "bg-surface-container-high text-on-surface font-medium" : "text-on-surface-variant hover:text-on-surface"
+                  }`}
+                >
+                  {k.label}
+                </button>
+              ))}
+            </div>
+          )}
           {draftCount > 0 && section !== "drafts" && (
             <div className="flex rounded-md border border-outline-variant bg-surface-container-lowest p-0.5 h-10">
               {(["all", "published", "drafts"] as Filter[]).map((f) => (
@@ -149,6 +229,7 @@ export function ContentList({ section, entries, settings, loading, repoUrl, bran
                     {entry.title || <span className="italic text-on-surface-variant">{fileLabel(entry.path)}</span>}
                   </Link>
                   {entry.draft && <Badge tone="draft">Draft</Badge>}
+                  {entry.archetype && <Badge tone="primary">{byName(entry.archetype)?.label ?? entry.archetype}</Badge>}
                   {entry.isIndex && <Badge>Section page</Badge>}
                 </div>
                 <div className="mt-1 flex items-center gap-x-2 gap-y-1 flex-wrap text-xs text-on-surface-variant">
@@ -165,6 +246,18 @@ export function ContentList({ section, entries, settings, loading, repoUrl, bran
                 </div>
               </div>
               <div className="hidden sm:block shrink-0 text-right text-[13px] tabular-nums text-on-surface-variant w-28">{formatDate(entry.date)}</div>
+              {!entry.path.endsWith("/_index.md") && (
+                <button
+                  type="button"
+                  onClick={() => flipDraft(entry)}
+                  disabled={toggling !== null}
+                  className={`icon-btn relative z-10 shrink-0 ${entry.draft ? "text-tertiary" : ""}`}
+                  title={entry.draft ? "Publish" : "Mark as draft"}
+                  aria-label={entry.draft ? `Publish ${entry.title}` : `Mark ${entry.title} as draft`}
+                >
+                  {toggling === entry.path ? <Spinner /> : <Icon name={entry.draft ? "visibility_off" : "visibility"} className="!text-[19px]" />}
+                </button>
+              )}
               <a
                 href={`${repoUrl}/blob/${branch}/${entry.path}`}
                 target="_blank"

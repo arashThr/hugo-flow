@@ -95,7 +95,7 @@ export function asStringArray(value: unknown): string[] {
 
 // @iarna/toml returns special Date objects for unquoted datetimes. Keep them as ISO strings so
 // they survive JSON (drafts, API responses); TOML stringify writes them back quoted, which Hugo accepts.
-function normalizeDates(data: FrontMatter): FrontMatter {
+export function normalizeDates(data: FrontMatter): FrontMatter {
   const out: FrontMatter = {};
   for (const [k, v] of Object.entries(data)) {
     if (v instanceof Date) out[k] = isNaN(v.getTime()) ? String(v) : v.toISOString();
@@ -103,6 +103,50 @@ function normalizeDates(data: FrontMatter): FrontMatter {
     else out[k] = v;
   }
   return out;
+}
+
+export function isPlainObject(value: unknown): value is FrontMatter {
+  return typeof value === "object" && value !== null && !Array.isArray(value) && !(value instanceof Date);
+}
+
+/** Structural equality that ignores key order and treats undefined values as missing keys. */
+export function deepEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+    return a.every((v, i) => deepEqual(v, b[i]));
+  }
+  if (isPlainObject(a) && isPlainObject(b)) {
+    const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+    for (const k of keys) if (!deepEqual(a[k], b[k])) return false;
+    return true;
+  }
+  return false;
+}
+
+/** Read a nested field by dotted path, e.g. "params.kind". */
+export function getPath(data: FrontMatter, path: string): unknown {
+  let cur: unknown = data;
+  for (const part of path.split(".")) {
+    if (!isPlainObject(cur)) return undefined;
+    cur = cur[part];
+  }
+  return cur;
+}
+
+/** Return a copy with a nested field set, or removed when value is undefined. Empty parent tables are dropped. */
+export function setPath(data: FrontMatter, path: string, value: unknown): FrontMatter {
+  const [head, ...rest] = path.split(".");
+  const next = { ...data };
+  if (rest.length === 0) {
+    if (value === undefined) delete next[head];
+    else next[head] = value;
+    return next;
+  }
+  const child = setPath(isPlainObject(data[head]) ? data[head] : {}, rest.join("."), value);
+  if (Object.keys(child).length === 0) delete next[head];
+  else next[head] = child;
+  return next;
 }
 
 function pruneEmpty(data: FrontMatter): FrontMatter {
