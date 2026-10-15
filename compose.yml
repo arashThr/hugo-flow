@@ -1,15 +1,25 @@
 services:
   hugo-ui:
+    # Built by GitHub Actions (.github/workflows/deploy.yml) and deployed with deploy/deploy.sh.
+    # TAG picks a build: latest, sha-<commit> or previous.
+    image: ghcr.io/arashthr/hugo-flow:${TAG:-latest}
+    # Fallback when CI is unavailable: `docker compose up -d --build` builds on this machine.
     build:
       context: .
       dockerfile: Dockerfile
     container_name: hugo-ui
     restart: unless-stopped
     ports:
+      # Exposing 9000 to the host so Caddy can reverse proxy to it
       - "9000:3000"
     environment:
       - NEXTAUTH_URL=${NEXTAUTH_URL}
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
       - GITHUB_ID=${GITHUB_ID}
       - GITHUB_SECRET=${GITHUB_SECRET}
-    # Exposing 9000 to the host so Caddy can reverse proxy to it
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
