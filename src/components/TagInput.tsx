@@ -49,7 +49,7 @@ export function TagInput({
           </span>
         ))}
         <input
-          className={`flex-1 min-w-[80px] bg-transparent outline-none py-0.5 text-on-surface placeholder:text-on-surface-variant/60 ${large ? "text-base" : "text-sm"}`}
+          className={`flex-1 min-w-[80px] bg-transparent outline-hidden py-0.5 text-on-surface placeholder:text-on-surface-variant/60 ${large ? "text-base" : "text-sm"}`}
           value={input}
           placeholder={tags.length ? "" : "Add tags…"}
           role="combobox"

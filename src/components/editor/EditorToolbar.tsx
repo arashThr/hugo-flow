@@ -118,7 +118,7 @@ export function EditorToolbar({ editor, viewMode, onViewMode, onImage, onImageRo
 
   return (
     <div className="sticky top-0 z-20 -mx-2 px-2 py-2 bg-background/85 backdrop-blur-md">
-      <div className="flex items-start gap-0.5 rounded-xl border border-outline-variant bg-surface-container-lowest p-1 shadow-sm">
+      <div className="flex items-start gap-0.5 rounded-xl border border-outline-variant bg-surface-container-lowest p-1 shadow-xs">
         <div className="flex items-center gap-0.5 overflow-x-auto hide-scrollbar min-w-0 flex-1 sm:flex-wrap sm:overflow-visible">
           {rich ? (
             <>
