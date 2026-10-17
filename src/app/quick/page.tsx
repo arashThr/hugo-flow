@@ -236,7 +236,7 @@ function QuickCapture() {
 
   return (
     <div className="min-h-[100dvh] flex flex-col">
-      <header className="sticky top-0 z-30 flex items-center gap-2 h-14 px-2 sm:px-4 border-b border-outline-variant bg-surface-container-lowest/95 backdrop-blur">
+      <header className="sticky top-0 z-30 flex items-center gap-2 h-14 px-2 sm:px-4 border-b border-outline-variant bg-surface-container-lowest/95 backdrop-blur-sm">
         <Link href={backHref} className="icon-btn" aria-label="Back">
           <Icon name="arrow_back" />
         </Link>
@@ -244,7 +244,7 @@ function QuickCapture() {
           <Icon name="bolt" className="!text-[18px] text-primary shrink-0" />
           {archetypes.length > 1 ? (
             <select
-              className="min-w-0 bg-transparent font-semibold text-on-surface outline-none rounded focus-visible:ring-2"
+              className="min-w-0 bg-transparent font-semibold text-on-surface outline-hidden rounded focus-visible:ring-2"
               value={archetype.name}
               onChange={(e) => setPicked(e.target.value)}
               aria-label="Kind"
@@ -266,7 +266,7 @@ function QuickCapture() {
 
       <main className="flex-1 w-full max-w-[640px] mx-auto px-4 pt-5 pb-10">
         <input
-          className="w-full bg-transparent font-display text-[26px] font-bold leading-tight tracking-tight text-on-surface placeholder:text-on-surface-variant/40 outline-none"
+          className="w-full bg-transparent font-display text-[26px] font-bold leading-tight tracking-tight text-on-surface placeholder:text-on-surface-variant/40 outline-hidden"
           placeholder="Title"
           value={draft.title}
           onChange={(e) => update({ title: e.target.value })}
@@ -284,7 +284,7 @@ function QuickCapture() {
           <span className="font-mono shrink-0">{sectionName(section, settings.contentDir)}/</span>
           {editingSlug ? (
             <input
-              className="flex-1 min-w-0 rounded border border-outline-variant bg-surface-container-lowest px-1.5 py-0.5 font-mono text-base sm:text-xs text-on-surface outline-none focus:border-primary"
+              className="flex-1 min-w-0 rounded border border-outline-variant bg-surface-container-lowest px-1.5 py-0.5 font-mono text-base sm:text-xs text-on-surface outline-hidden focus:border-primary"
               value={slug}
               autoFocus
               autoCapitalize="none"
@@ -311,7 +311,7 @@ function QuickCapture() {
 
         <textarea
           id="quick-body"
-          className="mt-5 w-full min-h-[40vh] resize-none bg-transparent font-serif text-[17px] leading-[1.7] text-on-surface placeholder:text-on-surface-variant/50 outline-none"
+          className="mt-5 w-full min-h-[40vh] resize-none bg-transparent font-serif text-[17px] leading-[1.7] text-on-surface placeholder:text-on-surface-variant/50 outline-hidden"
           placeholder="What did you learn? Markdown works."
           value={draft.body}
           onChange={(e) => {

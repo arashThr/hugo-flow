@@ -139,7 +139,7 @@ export function LandingPage() {
               href={REPO_URL}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 rounded-full border border-outline-variant bg-surface-container-lowest/80 px-3 py-1 text-xs text-on-surface-variant shadow-sm hover:text-on-surface transition-colors"
+              className="inline-flex items-center gap-2 rounded-full border border-outline-variant bg-surface-container-lowest/80 px-3 py-1 text-xs text-on-surface-variant shadow-xs hover:text-on-surface transition-colors"
             >
               <span className="w-1.5 h-1.5 rounded-full bg-primary" />
               Open source · Free · Nothing to install
@@ -148,7 +148,7 @@ export function LandingPage() {
 
             <h1 className="mt-7 font-display text-[42px] sm:text-6xl lg:text-[72px] font-bold leading-[1.03] tracking-[-0.035em] text-on-surface max-w-4xl mx-auto">
               Write for your Hugo blog,{" "}
-              <span className="bg-gradient-to-br from-primary to-[#7fb08d] dark:to-[#c8e8d0] bg-clip-text text-transparent">right in the browser.</span>
+              <span className="bg-linear-to-br from-primary to-[#7fb08d] dark:to-[#c8e8d0] bg-clip-text text-transparent">right in the browser.</span>
             </h1>
 
             <p className="mt-6 text-lg sm:text-xl leading-relaxed text-on-surface-variant max-w-2xl mx-auto">

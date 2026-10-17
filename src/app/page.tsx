@@ -81,7 +81,7 @@ function Dashboard() {
       />
 
       {/* Mobile header */}
-      <header className="md:hidden sticky top-0 z-30 flex items-center gap-2 h-14 px-3 bg-background/90 backdrop-blur border-b border-outline-variant">
+      <header className="md:hidden sticky top-0 z-30 flex items-center gap-2 h-14 px-3 bg-background/90 backdrop-blur-sm border-b border-outline-variant">
         <button className="icon-btn" onClick={() => setMenuOpen(true)} aria-label="Open menu">
           <Icon name="menu" />
         </button>

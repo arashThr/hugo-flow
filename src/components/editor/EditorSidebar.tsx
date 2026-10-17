@@ -83,7 +83,7 @@ export function EditorSidebar(props: Props) {
               aria-checked={draft}
             >
               <span className={`relative w-9 h-5 rounded-full transition-colors shrink-0 ${draft ? "bg-tertiary" : "bg-primary"}`}>
-                <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${draft ? "left-0.5" : "left-[18px]"}`} />
+                <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-all ${draft ? "left-0.5" : "left-[18px]"}`} />
               </span>
               <span className="min-w-0">
                 <span className="block text-sm font-medium text-on-surface">{draft ? "Draft" : "Published"}</span>
@@ -201,7 +201,7 @@ export function EditorSidebar(props: Props) {
                 <span className="field-label">File name</span>
                 <div className="flex items-center rounded-md border border-outline-variant bg-surface-container-lowest focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20">
                   <input
-                    className="flex-1 min-w-0 bg-transparent px-3 py-2 font-mono text-[13px] text-on-surface outline-none disabled:opacity-60"
+                    className="flex-1 min-w-0 bg-transparent px-3 py-2 font-mono text-[13px] text-on-surface outline-hidden disabled:opacity-60"
                     value={props.fileName}
                     onChange={(e) => props.onFileName(e.target.value.replace(/[^\w.-]+/g, "-"))}
                     disabled={props.fileNameLocked}

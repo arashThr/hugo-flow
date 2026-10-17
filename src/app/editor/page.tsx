@@ -842,7 +842,7 @@ function EditorScreen() {
             )}
 
             <textarea
-              className="w-full resize-none overflow-hidden bg-transparent font-display text-[32px] sm:text-[40px] font-bold leading-tight tracking-tight text-on-surface placeholder:text-on-surface-variant/40 outline-none"
+              className="w-full resize-none overflow-hidden bg-transparent font-display text-[32px] sm:text-[40px] font-bold leading-tight tracking-tight text-on-surface placeholder:text-on-surface-variant/40 outline-hidden"
               placeholder="Title"
               rows={1}
               value={asString(fm.title)}
@@ -940,7 +940,7 @@ function EditorScreen() {
               {viewMode === "markdown" && (
                 <textarea
                   ref={textareaRef}
-                  className="w-full min-h-[60vh] resize-none bg-transparent font-mono text-[14px] leading-[1.7] text-on-surface outline-none pb-[30vh]"
+                  className="w-full min-h-[60vh] resize-none bg-transparent font-mono text-[14px] leading-[1.7] text-on-surface outline-hidden pb-[30vh]"
                   value={markdown}
                   onChange={(e) => {
                     setMarkdown(e.target.value);

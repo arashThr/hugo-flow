@@ -1,6 +1,5 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+@config "../../tailwind.config.ts";
 
 /* Colour tokens as "r g b" so Tailwind's /opacity modifiers work. */
 :root {
@@ -65,6 +64,19 @@
   }
 }
 
+/* Tailwind 4 changed these defaults; keep the v3 look. */
+@layer base {
+  *, ::after, ::before, ::backdrop, ::file-selector-button {
+    border-color: var(--color-gray-200, currentColor);
+  }
+  input::placeholder, textarea::placeholder {
+    color: var(--color-gray-400);
+  }
+  button:not(:disabled), [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+}
+
 @layer base {
   html {
     scroll-behavior: smooth;
@@ -73,38 +85,36 @@
     @apply bg-background text-on-surface;
   }
   :focus-visible {
-    @apply outline-none ring-2 ring-primary/60 ring-offset-1 ring-offset-background;
+    @apply outline-hidden ring-2 ring-primary/60 ring-offset-1 ring-offset-background;
   }
 }
 
-@layer components {
-  .btn {
-    @apply inline-flex items-center justify-center gap-1.5 rounded-md px-3.5 h-9 text-sm font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none whitespace-nowrap;
-  }
-  .btn-primary {
-    @apply btn bg-primary text-on-primary hover:bg-primary/90 shadow-sm;
-  }
-  .btn-secondary {
-    @apply btn border border-outline-variant bg-surface-container-lowest text-on-surface hover:bg-surface-container;
-  }
-  .btn-ghost {
-    @apply btn text-on-surface-variant hover:bg-surface-container hover:text-on-surface;
-  }
-  .btn-danger {
-    @apply btn bg-error text-white hover:bg-error/90 dark:text-on-error-container dark:bg-error-container;
-  }
-  .icon-btn {
-    @apply inline-flex items-center justify-center rounded-md w-9 h-9 text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-colors disabled:opacity-40 disabled:pointer-events-none;
-  }
-  .field {
-    @apply w-full rounded-md border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface placeholder:text-on-surface-variant/60 transition-colors focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20;
-  }
-  .field-label {
-    @apply block text-xs font-medium text-on-surface-variant mb-1.5;
-  }
-  .card {
-    @apply rounded-xl border border-outline-variant bg-surface-container-lowest;
-  }
+@utility btn {
+  @apply inline-flex items-center justify-center gap-1.5 rounded-md px-3.5 h-9 text-sm font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none whitespace-nowrap;
+}
+@utility btn-primary {
+  @apply btn bg-primary text-on-primary hover:bg-primary/90 shadow-xs;
+}
+@utility btn-secondary {
+  @apply btn border border-outline-variant bg-surface-container-lowest text-on-surface hover:bg-surface-container;
+}
+@utility btn-ghost {
+  @apply btn text-on-surface-variant hover:bg-surface-container hover:text-on-surface;
+}
+@utility btn-danger {
+  @apply btn bg-error text-white hover:bg-error/90 dark:text-on-error-container dark:bg-error-container;
+}
+@utility icon-btn {
+  @apply inline-flex items-center justify-center rounded-md w-9 h-9 text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-colors disabled:opacity-40 disabled:pointer-events-none;
+}
+@utility field {
+  @apply w-full rounded-md border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface placeholder:text-on-surface-variant/60 transition-colors focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/20;
+}
+@utility field-label {
+  @apply block text-xs font-medium text-on-surface-variant mb-1.5;
+}
+@utility card {
+  @apply rounded-xl border border-outline-variant bg-surface-container-lowest;
 }
 
 @layer utilities {
