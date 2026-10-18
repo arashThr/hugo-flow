@@ -7,7 +7,8 @@ import { fileLabel, formatDate, sectionLabel, sectionName, type ContentEntry } f
 import type { Settings } from "@/components/SettingsProvider";
 import { useToast } from "@/components/Toast";
 import { useArchetypes } from "@/components/useArchetypes";
-import { archetypeCommitMessage, archetypeSection } from "@/lib/archetypes";
+import { archetypeCommitMessage, archetypeSection, kindArchetypes, sectionArchetype } from "@/lib/archetypes";
+import { NewMenu, type NewMenuItem } from "@/components/dashboard/NewMenu";
 import { toggleDraft } from "@/lib/save";
 
 type Filter = "all" | "published" | "drafts";
@@ -57,8 +58,22 @@ export function ContentList({ section, entries, settings, loading, repoUrl, bran
   }, [scoped, archetypes]);
   const showKinds = kinds.length >= 2;
 
-  // "New TIL", "New essay": archetypes whose posts live here (or all of them on the overview).
-  const creatable = archetypes.filter((a) => section === "all" || archetypeSection(a.name, entries, settings.postsSection) === section);
+  // "New post" uses the archetype `hugo new` would; the menu offers the kinds whose posts live here
+  // (or all of them on the overview), plus quick capture.
+  const baseArchetype = sectionArchetype(archetypes, newTarget);
+  const newPostHref = `/editor?new=${encodeURIComponent(newTarget)}${baseArchetype ? `&archetype=${encodeURIComponent(baseArchetype.name)}` : ""}`;
+  const creatable = kindArchetypes(archetypes).filter((a) => section === "all" || archetypeSection(a.name, entries, settings.postsSection) === section);
+  const menuItems: NewMenuItem[] = [
+    ...(creatable.length
+      ? [{ href: `/quick?archetype=${encodeURIComponent(creatable[0].name)}`, label: "Quick capture", hint: "Title, body and tags, then publish", icon: "bolt" }]
+      : []),
+    ...creatable.map((a) => ({
+      href: `/editor?new=${encodeURIComponent(archetypeSection(a.name, entries, isSection ? section : settings.postsSection))}&archetype=${encodeURIComponent(a.name)}`,
+      label: `New ${a.label}`,
+      hint: `From archetypes/${a.path.split("/").slice(1).join("/")}`,
+      icon: "add",
+    })),
+  ];
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -70,14 +85,16 @@ export function ContentList({ section, entries, settings, loading, repoUrl, bran
       return e.title.toLowerCase().includes(q) || e.path.toLowerCase().includes(q) || e.tags.some((t) => t.toLowerCase().includes(q));
     });
     const time = (e: ContentEntry) => (e.date ? new Date(e.date).getTime() || 0 : 0);
+    // The section's own page stays on top; other section pages (sub-sections, or all of them on the
+    // overview) have no date and go last, so posts lead. Leaf bundles (index.md) are ordinary posts.
+    const rank = (e: ContentEntry) => (isSection && e.path === `${section}/_index.md` ? 0 : e.path.endsWith("/_index.md") ? 2 : 1);
     return list.sort((a, b) => {
-      // Section index pages (_index.md) stay on top of their section.
-      if (isSection && a.isIndex !== b.isIndex) return a.isIndex ? -1 : 1;
+      if (rank(a) !== rank(b) && (sort !== "title" || rank(a) === 0 || rank(b) === 0)) return rank(a) - rank(b);
       if (sort === "title") return (a.title || a.path).localeCompare(b.title || b.path);
       const diff = sort === "newest" ? time(b) - time(a) : time(a) - time(b);
       return diff || (a.title || a.path).localeCompare(b.title || b.path);
     });
-  }, [scoped, query, filter, sort, isSection, showKinds, kind]);
+  }, [scoped, query, filter, sort, isSection, section, showKinds, kind]);
 
   const flipDraft = async (entry: ContentEntry) => {
     setToggling(entry.path);
@@ -121,25 +138,8 @@ export function ContentList({ section, entries, settings, loading, repoUrl, bran
           </p>
         </div>
         {section !== "drafts" && (
-          <div className="flex flex-wrap gap-2 self-start sm:self-auto sm:justify-end">
-            {creatable.length > 0 && (
-              <Link href={`/quick?archetype=${encodeURIComponent(creatable[0].name)}`} className="btn-secondary" title="Quick capture: title, body, tags">
-                <Icon name="bolt" className="!text-[18px]" /> Quick
-              </Link>
-            )}
-            {creatable.map((a) => (
-              <Link
-                key={a.name}
-                href={`/editor?new=${encodeURIComponent(archetypeSection(a.name, entries, isSection ? section : settings.postsSection))}&archetype=${encodeURIComponent(a.name)}`}
-                className="btn-secondary"
-              >
-                <Icon name="add" className="!text-[18px]" /> New {a.label}
-              </Link>
-            ))}
-            <Link href={`/editor?new=${encodeURIComponent(newTarget)}`} className="btn-primary">
-              <Icon name="add" className="!text-[19px]" />
-              {isPosts || section === "all" ? "New post" : `New in ${sectionLabel(section, settings.contentDir)}`}
-            </Link>
+          <div className="self-start sm:self-auto">
+            <NewMenu href={newPostHref} label={isPosts || section === "all" ? "New post" : `New in ${sectionLabel(section, settings.contentDir)}`} items={menuItems} />
           </div>
         )}
       </header>

@@ -259,6 +259,17 @@ export function archetypeSection(name: string, entries: { section: string; arche
   return best;
 }
 
+/** The archetype `hugo new` uses for a plain new post in a section: one named after the section, else default. */
+export function sectionArchetype<T extends { name: string }>(archetypes: T[], section: string): T | null {
+  const name = section.split("/").pop();
+  return archetypes.find((a) => a.name === name) ?? archetypes.find((a) => a.name === "default") ?? null;
+}
+
+/** Archetypes that stand for a kind of post (they set a fixed value like kind = "til"), as opposed to default.md. */
+export function kindArchetypes<T extends { literals: Record<string, unknown> }>(archetypes: T[]): T[] {
+  return archetypes.filter((a) => Object.keys(a.literals).length > 0);
+}
+
 /* ---------- Commit messages ---------- */
 
 export type CommitAction = "add" | "update" | "rename" | "publish" | "unpublish" | "delete";

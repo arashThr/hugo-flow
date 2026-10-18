@@ -10,7 +10,7 @@ import { useToast } from "@/components/Toast";
 import { useArchetypes } from "@/components/useArchetypes";
 import { TagInput } from "@/components/TagInput";
 import { Icon, Spinner } from "@/components/ui";
-import { archetypeCommitMessage, archetypeSection, loadArchetype, switchArchetype, type Archetype } from "@/lib/archetypes";
+import { archetypeCommitMessage, archetypeSection, kindArchetypes, loadArchetype, switchArchetype, type Archetype } from "@/lib/archetypes";
 import { sectionName, slugify } from "@/lib/content";
 import { draftKey, readDraft, writeDraft } from "@/lib/drafts";
 import type { FrontMatter } from "@/lib/frontmatter";
@@ -41,7 +41,9 @@ function QuickCapture() {
   const { status } = useSession();
   const { settings, isLoaded } = useSettings();
   const { site, refresh, error: siteError } = useSite();
-  const { archetypes, byName } = useArchetypes();
+  const { archetypes: all, byName } = useArchetypes();
+  // The kinds of post (TIL, essay), not default.md and friends; any archetype if none set a kind.
+  const archetypes = useMemo(() => (kindArchetypes(all).length ? kindArchetypes(all) : all), [all]);
   const toast = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -68,8 +70,8 @@ function QuickCapture() {
     }
     const fallback = [...archetypes].sort((a, b) => a.fields.length - b.fields.length)[0];
     // eslint-disable-next-line react-hooks/set-state-in-effect -- reading browser-only storage after mount
-    setPicked(byName(last)?.name ?? fallback.name);
-  }, [picked, archetypes, byName]);
+    setPicked(archetypes.find((a) => a.name === last)?.name ?? fallback.name);
+  }, [picked, archetypes]);
 
   const archetype = byName(picked);
   const entries = useMemo(() => site?.entries ?? [], [site]);
