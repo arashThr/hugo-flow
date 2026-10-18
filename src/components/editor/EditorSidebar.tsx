@@ -2,6 +2,8 @@
 
 import { useState, type ReactNode } from "react";
 import { Icon } from "@/components/ui";
+import { TagInput } from "@/components/TagInput";
+import { RefPicker, type RefOption } from "@/components/editor/RefPicker";
 import { asString, asStringArray, type FrontMatter, type FrontMatterFormat } from "@/lib/frontmatter";
 import { fromLocalInput, toLocalInput } from "@/lib/content";
 
@@ -31,6 +33,8 @@ interface Props {
   otherError: string | null;
   onDelete?: () => void;
   githubUrl?: string;
+  kind?: { value: string; options: { value: string; label: string }[]; onChange: (value: string) => void };
+  refs?: { path: string; value: string[]; options: RefOption[]; targetLabel: string; onChange: (value: string[]) => void }[];
 }
 
 function Section({ title, children, action }: { title: string; children: ReactNode; action?: ReactNode }) {
@@ -79,7 +83,7 @@ export function EditorSidebar(props: Props) {
               aria-checked={draft}
             >
               <span className={`relative w-9 h-5 rounded-full transition-colors shrink-0 ${draft ? "bg-tertiary" : "bg-primary"}`}>
-                <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${draft ? "left-0.5" : "left-[18px]"}`} />
+                <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-all ${draft ? "left-0.5" : "left-[18px]"}`} />
               </span>
               <span className="min-w-0">
                 <span className="block text-sm font-medium text-on-surface">{draft ? "Draft" : "Published"}</span>
@@ -90,6 +94,20 @@ export function EditorSidebar(props: Props) {
 
           <Section title="Details">
             <div className="space-y-4">
+              {props.kind && (
+                <label className="block">
+                  <span className="field-label">Kind</span>
+                  <select className="field" value={props.kind.value} onChange={(e) => props.kind!.onChange(e.target.value)}>
+                    {!props.kind.options.some((o) => o.value === props.kind!.value) && <option value={props.kind.value}>{props.kind.value || "—"}</option>}
+                    {props.kind.options.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+
               {props.showDate || fm.date !== undefined ? (
                 <label className="block">
                   <span className="field-label">Date</span>
@@ -126,6 +144,13 @@ export function EditorSidebar(props: Props) {
                   onChange={(e) => setField(props.descriptionKey, e.target.value)}
                 />
               </label>
+
+              {props.refs?.map((ref) => (
+                <div key={ref.path}>
+                  <span className="field-label">{ref.path.split(".").pop()!.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase())}</span>
+                  <RefPicker value={ref.value} options={ref.options} onChange={ref.onChange} placeholder={`Link ${ref.targetLabel}…`} />
+                </div>
+              ))}
             </div>
           </Section>
 
@@ -176,7 +201,7 @@ export function EditorSidebar(props: Props) {
                 <span className="field-label">File name</span>
                 <div className="flex items-center rounded-md border border-outline-variant bg-surface-container-lowest focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20">
                   <input
-                    className="flex-1 min-w-0 bg-transparent px-3 py-2 font-mono text-[13px] text-on-surface outline-none disabled:opacity-60"
+                    className="flex-1 min-w-0 bg-transparent px-3 py-2 font-mono text-[13px] text-on-surface outline-hidden disabled:opacity-60"
                     value={props.fileName}
                     onChange={(e) => props.onFileName(e.target.value.replace(/[^\w.-]+/g, "-"))}
                     disabled={props.fileNameLocked}
@@ -236,53 +261,5 @@ export function EditorSidebar(props: Props) {
         </div>
       </aside>
     </>
-  );
-}
-
-function TagInput({ tags, suggestions, onChange }: { tags: string[]; suggestions: string[]; onChange: (tags: string[]) => void }) {
-  const [input, setInput] = useState("");
-  const add = (raw: string) => {
-    const next = raw
-      .split(",")
-      .map((t) => t.trim())
-      .filter((t) => t && !tags.includes(t));
-    if (next.length) onChange([...tags, ...next]);
-    setInput("");
-  };
-  const listId = "tag-suggestions";
-  return (
-    <div className="flex flex-wrap items-center gap-1.5 rounded-md border border-outline-variant bg-surface-container-lowest px-2 py-1.5 min-h-[40px] focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20">
-      {tags.map((t) => (
-        <span key={t} className="inline-flex items-center gap-0.5 rounded bg-surface-container-high pl-2 pr-0.5 py-0.5 text-xs text-on-surface">
-          {t}
-          <button type="button" className="rounded hover:bg-surface-container-highest p-0.5" onClick={() => onChange(tags.filter((x) => x !== t))} aria-label={`Remove ${t}`}>
-            <Icon name="close" className="!text-[13px]" />
-          </button>
-        </span>
-      ))}
-      <input
-        className="flex-1 min-w-[80px] bg-transparent text-sm outline-none py-0.5 text-on-surface placeholder:text-on-surface-variant/60"
-        value={input}
-        list={listId}
-        placeholder={tags.length ? "" : "Add tags…"}
-        onChange={(e) => (e.target.value.endsWith(",") ? add(e.target.value) : setInput(e.target.value))}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            add(input);
-          } else if (e.key === "Backspace" && !input && tags.length) {
-            onChange(tags.slice(0, -1));
-          }
-        }}
-        onBlur={() => input && add(input)}
-      />
-      <datalist id={listId}>
-        {suggestions
-          .filter((s) => !tags.includes(s))
-          .map((s) => (
-            <option key={s} value={s} />
-          ))}
-      </datalist>
-    </div>
   );
 }

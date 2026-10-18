@@ -5,6 +5,8 @@ import type { Session } from "next-auth";
 import { Icon } from "@/components/ui";
 import { sectionLabel, type SiteInfo } from "@/lib/content";
 import type { Settings } from "@/components/SettingsProvider";
+import { useArchetypes } from "@/components/useArchetypes";
+import { kindArchetypes, sectionArchetype } from "@/lib/archetypes";
 
 export type DashboardView = { kind: "content"; section: string } | { kind: "media" } | { kind: "settings" };
 
@@ -45,6 +47,9 @@ export function AppSidebar({ session, settings, site, view, open, onClose, onSig
   const drafts = entries.filter((e) => e.draft).length;
   const unusedMedia = site?.media.filter((m) => m.usedBy.length === 0).length ?? 0;
   const repoUrl = `https://github.com/${settings.repository}`;
+  const { archetypes } = useArchetypes();
+  const hasArchetypes = kindArchetypes(archetypes).length > 0;
+  const baseArchetype = sectionArchetype(archetypes, settings.postsSection);
 
   const isActive = (target: DashboardView) => {
     if (target.kind !== view.kind) return false;
@@ -125,9 +130,16 @@ export function AppSidebar({ session, settings, site, view, open, onClose, onSig
         </div>
 
         <div className="px-3 mb-4">
-          <Link href={`/editor?new=${encodeURIComponent(settings.postsSection)}`} className="btn-primary w-full !h-10" onClick={onClose}>
+          <Link
+            href={`/editor?new=${encodeURIComponent(settings.postsSection)}${baseArchetype ? `&archetype=${encodeURIComponent(baseArchetype.name)}` : ""}`}
+            className="btn-primary w-full !h-10" onClick={onClose}>
             <Icon name="add" className="!text-[19px]" /> New post
           </Link>
+          {hasArchetypes && (
+            <Link href="/quick" className="btn-secondary w-full mt-2" onClick={onClose}>
+              <Icon name="bolt" className="!text-[18px]" /> Quick capture
+            </Link>
+          )}
         </div>
 
         <div className="flex-1 overflow-y-auto px-3 pb-3 space-y-5">

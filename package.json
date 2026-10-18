@@ -6,23 +6,22 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "vitest run"
   },
   "dependencies": {
     "@iarna/toml": "^2.2.5",
     "@octokit/rest": "^22.0.1",
     "@tailwindcss/typography": "^0.5.19",
-    "@tiptap/extension-code": "^3.23.4",
-    "@tiptap/extension-code-block-lowlight": "^3.22.5",
-    "@tiptap/extension-image": "^3.22.5",
-    "@tiptap/extension-link": "^3.22.5",
-    "@tiptap/extension-list": "^3.23.4",
-    "@tiptap/extensions": "^3.23.4",
-    "@tiptap/react": "^3.22.5",
-    "@tiptap/starter-kit": "^3.22.5",
+    "@tiptap/extension-code": "^3.32.0",
+    "@tiptap/extension-code-block-lowlight": "^3.32.0",
+    "@tiptap/extension-image": "^3.32.0",
+    "@tiptap/extension-list": "^3.32.0",
+    "@tiptap/extensions": "^3.32.0",
+    "@tiptap/react": "^3.32.0",
+    "@tiptap/starter-kit": "^3.32.0",
     "highlight.js": "^11.11.1",
     "lowlight": "^3.3.0",
-    "lucide-react": "^1.14.0",
     "markdown-it-task-lists": "^2.1.1",
     "next": "^16.2.6",
     "next-auth": "^4.24.14",
@@ -32,16 +31,18 @@
     "yaml": "^2.9.1"
   },
   "devDependencies": {
-    "@tailwindcss/container-queries": "^0.1.1",
-    "@tailwindcss/forms": "^0.5.11",
+    "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "autoprefixer": "^10.5.0",
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
     "postcss": "^8.5.13",
-    "tailwindcss": "^3.4.19",
-    "typescript": "^5"
+    "tailwindcss": "^4.3.3",
+    "typescript": "^5",
+    "vitest": "^4.1.11"
+  },
+  "overrides": {
+    "postcss-selector-parser": "^7.1.6"
   }
 }

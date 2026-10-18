@@ -106,7 +106,7 @@ export function EditorToolbar({ editor, viewMode, onViewMode, onImage, onImageRo
 
   return (
     <div className="sticky top-0 z-20 -mx-2 px-2 py-2 bg-background/85 backdrop-blur-md">
-      <div className="flex items-start gap-0.5 rounded-xl border border-outline-variant bg-surface-container-lowest p-1 shadow-sm">
+      <div className="flex items-start gap-0.5 rounded-xl border border-outline-variant bg-surface-container-lowest p-1 shadow-xs">
         <div className="flex items-center gap-0.5 overflow-x-auto hide-scrollbar min-w-0 flex-1 sm:flex-wrap sm:overflow-visible">
           {rich ? (
             <>
@@ -145,7 +145,7 @@ export function EditorToolbar({ editor, viewMode, onViewMode, onImage, onImageRo
               type="button"
               onClick={() => onViewMode(mode)}
               className={`h-7 px-2.5 rounded-md text-xs font-medium transition-colors flex items-center gap-1 ${
-                viewMode === mode ? "bg-surface-container-lowest text-on-surface shadow-sm" : "text-on-surface-variant hover:text-on-surface"
+                viewMode === mode ? "bg-surface-container-lowest text-on-surface shadow-xs" : "text-on-surface-variant hover:text-on-surface"
               }`}
               title={mode === "rich" ? "Visual editor" : "Edit raw markdown"}
             >

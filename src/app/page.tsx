@@ -11,6 +11,8 @@ import { AppSidebar, type DashboardView } from "@/components/dashboard/AppSideba
 import { ContentList } from "@/components/dashboard/ContentList";
 import { MediaLibrary } from "@/components/dashboard/MediaLibrary";
 import { Icon, Spinner } from "@/components/ui";
+import { useArchetypes } from "@/components/useArchetypes";
+import Link from "next/link";
 
 function FullScreenLoading() {
   return (
@@ -34,6 +36,7 @@ function Dashboard() {
   const { site, loading, error, refresh } = useSite();
   const searchParams = useSearchParams();
   const [menuOpen, setMenuOpen] = useState(false);
+  const hasArchetypes = useArchetypes().archetypes.length > 0;
 
   if (status === "loading" || !isLoaded) return <FullScreenLoading />;
   if (!session) return <LandingPage />;
@@ -78,11 +81,16 @@ function Dashboard() {
       />
 
       {/* Mobile header */}
-      <header className="md:hidden sticky top-0 z-30 flex items-center gap-2 h-14 px-3 bg-background/90 backdrop-blur border-b border-outline-variant">
+      <header className="md:hidden sticky top-0 z-30 flex items-center gap-2 h-14 px-3 bg-background/90 backdrop-blur-sm border-b border-outline-variant">
         <button className="icon-btn" onClick={() => setMenuOpen(true)} aria-label="Open menu">
           <Icon name="menu" />
         </button>
         <span className="font-display font-bold text-on-surface truncate">{settings.repository.split("/")[1]}</span>
+        {hasArchetypes && (
+          <Link href="/quick" className="icon-btn ml-auto" aria-label="Quick capture" title="Quick capture">
+            <Icon name="bolt" />
+          </Link>
+        )}
       </header>
 
       <main className="px-4 py-6 sm:px-8 sm:py-10">
@@ -109,6 +117,7 @@ function Dashboard() {
             loading={loading}
             repoUrl={`https://github.com/${settings.repository}`}
             branch={site?.branch ?? (settings.branch || "main")}
+            onChanged={refresh}
           />
         )}
       </main>

@@ -12,7 +12,7 @@ export const PHOTOS = [
 /** A photo-like tile: sky gradient, a sun and two hills. */
 export function Photo({ tone, className = "" }: { tone: string; className?: string }) {
   return (
-    <div className={`relative overflow-hidden rounded-md bg-gradient-to-b ${tone} ${className}`} aria-hidden="true">
+    <div className={`relative overflow-hidden rounded-md bg-linear-to-b ${tone} ${className}`} aria-hidden="true">
       <div className="absolute right-[18%] top-[18%] w-[16%] aspect-square rounded-full bg-white/70" />
       <div className="absolute -left-[10%] bottom-[-35%] w-[80%] aspect-square rounded-full bg-black/20" />
       <div className="absolute -right-[20%] bottom-[-45%] w-[90%] aspect-square rounded-full bg-black/25" />
