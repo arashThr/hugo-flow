@@ -182,6 +182,12 @@
   min-width: 0;
   width: 100%;
 }
+/* The inline-code look (prose-code:*) also matches <code> inside code blocks; keep blocks one colour. */
+.prose pre code {
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+}
 .ProseMirror .shortcode-chip {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.8em;

@@ -4,11 +4,13 @@ import {
   archetypePaths,
   archetypeSection,
   hugoDate,
+  kindArchetypes,
   kindFields,
   loadArchetype,
   matchArchetype,
   referenceFields,
   renderTemplate,
+  sectionArchetype,
   switchArchetype,
   type RefEntry,
 } from "./archetypes";
@@ -151,6 +153,14 @@ Body.
     expect(switchArchetype(asEssay, essay, til)).toEqual(asTil);
     const kept = switchArchetype({ ...asEssay, summary: "Written" }, essay, til);
     expect(kept.summary).toBe("Written");
+  });
+
+  it("a plain new post uses the section's archetype, else default, like hugo new", () => {
+    const list = [{ name: "default" }, { name: "blog" }, { name: "til" }];
+    expect(sectionArchetype(list, "content/blog")?.name).toBe("blog");
+    expect(sectionArchetype(list, "content/aie")?.name).toBe("default");
+    expect(sectionArchetype([{ name: "til" }], "content/aie")).toBeNull();
+    expect(kindArchetypes([til, essay, loadArchetype({ name: "default", path: "archetypes/default.md", bundle: false, source: "+++\ntitle = ''\ndraft = true\n+++\n" })]).map((a) => a.name)).toEqual(["til", "essay"]);
   });
 
   it("new posts go where most posts of that kind already live", () => {
