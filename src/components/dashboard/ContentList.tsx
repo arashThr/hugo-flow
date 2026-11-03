@@ -5,6 +5,8 @@ import { useMemo, useState } from "react";
 import { Badge, Icon, Spinner } from "@/components/ui";
 import { fileLabel, formatDate, sectionLabel, type ContentEntry } from "@/lib/content";
 import type { Settings } from "@/components/SettingsProvider";
+import { useToast } from "@/components/Toast";
+import { toggleDraft } from "@/lib/save";
 
 type Filter = "all" | "published" | "drafts";
 type Sort = "newest" | "oldest" | "title";
@@ -16,15 +18,18 @@ interface Props {
   loading: boolean;
   repoUrl: string;
   branch: string;
+  onChanged: () => Promise<void>;
 }
 
 const PAGE_SIZE = 40;
 
-export function ContentList({ section, entries, settings, loading, repoUrl, branch }: Props) {
+export function ContentList({ section, entries, settings, loading, repoUrl, branch, onChanged }: Props) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [sort, setSort] = useState<Sort>("newest");
   const [visible, setVisible] = useState(PAGE_SIZE);
+  const [toggling, setToggling] = useState<string | null>(null);
+  const toast = useToast();
 
   const isSection = section !== "all" && section !== "drafts";
   const title = section === "all" ? "All content" : section === "drafts" ? "Drafts" : sectionLabel(section, settings.contentDir);
@@ -50,14 +55,36 @@ export function ContentList({ section, entries, settings, loading, repoUrl, bran
       return e.title.toLowerCase().includes(q) || e.path.toLowerCase().includes(q) || e.tags.some((t) => t.toLowerCase().includes(q));
     });
     const time = (e: ContentEntry) => (e.date ? new Date(e.date).getTime() || 0 : 0);
+    // The section's own page stays on top; other section pages (sub-sections, or all of them on the
+    // overview) have no date and go last, so posts lead. Leaf bundles (index.md) are ordinary posts.
+    const rank = (e: ContentEntry) => (isSection && e.path === `${section}/_index.md` ? 0 : e.path.endsWith("/_index.md") ? 2 : 1);
     return list.sort((a, b) => {
-      // Section index pages (_index.md) stay on top of their section.
-      if (isSection && a.isIndex !== b.isIndex) return a.isIndex ? -1 : 1;
+      if (rank(a) !== rank(b) && (sort !== "title" || rank(a) === 0 || rank(b) === 0)) return rank(a) - rank(b);
       if (sort === "title") return (a.title || a.path).localeCompare(b.title || b.path);
       const diff = sort === "newest" ? time(b) - time(a) : time(a) - time(b);
       return diff || (a.title || a.path).localeCompare(b.title || b.path);
     });
-  }, [scoped, query, filter, sort, isSection]);
+  }, [scoped, query, filter, sort, isSection, section]);
+
+  const flipDraft = async (entry: ContentEntry) => {
+    setToggling(entry.path);
+    const title = entry.title || fileLabel(entry.path);
+    try {
+      await toggleDraft({
+        repository: settings.repository,
+        branch,
+        path: entry.path,
+        message: (draft) =>
+          draft ? `Mark "${title}" as draft` : `Publish "${title}"`,
+      });
+      await onChanged();
+      toast(entry.draft ? `Published "${title}"` : `"${title}" is now a draft`);
+    } catch (e) {
+      toast((e as Error).message, "error");
+    } finally {
+      setToggling(null);
+    }
+  };
 
   const draftCount = scoped.filter((e) => e.draft).length;
 
@@ -76,10 +103,11 @@ export function ContentList({ section, entries, settings, loading, repoUrl, bran
           </p>
         </div>
         {section !== "drafts" && (
-          <Link href={`/editor?new=${encodeURIComponent(newTarget)}`} className="btn-primary self-start sm:self-auto">
-            <Icon name="add" className="!text-[19px]" />
-            {isPosts || section === "all" ? "New post" : `New in ${sectionLabel(section, settings.contentDir)}`}
-          </Link>
+          <div className="self-start sm:self-auto">
+            <Link href={`/editor?new=${encodeURIComponent(newTarget)}`} className="btn-primary">
+              <Icon name="add" className="!text-[19px]" /> {isPosts || section === "all" ? "New post" : `New in ${sectionLabel(section, settings.contentDir)}`}
+            </Link>
+          </div>
         )}
       </header>
 
@@ -96,7 +124,7 @@ export function ContentList({ section, entries, settings, loading, repoUrl, bran
             }}
           />
         </label>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {draftCount > 0 && section !== "drafts" && (
             <div className="flex rounded-md border border-outline-variant bg-surface-container-lowest p-0.5 h-10">
               {(["all", "published", "drafts"] as Filter[]).map((f) => (
@@ -165,6 +193,18 @@ export function ContentList({ section, entries, settings, loading, repoUrl, bran
                 </div>
               </div>
               <div className="hidden sm:block shrink-0 text-right text-[13px] tabular-nums text-on-surface-variant w-28">{formatDate(entry.date)}</div>
+              {!entry.path.endsWith("/_index.md") && (
+                <button
+                  type="button"
+                  onClick={() => flipDraft(entry)}
+                  disabled={toggling !== null}
+                  className={`icon-btn relative z-10 shrink-0 ${entry.draft ? "text-tertiary" : ""}`}
+                  title={entry.draft ? "Publish" : "Mark as draft"}
+                  aria-label={entry.draft ? `Publish ${entry.title}` : `Mark ${entry.title} as draft`}
+                >
+                  {toggling === entry.path ? <Spinner /> : <Icon name={entry.draft ? "visibility_off" : "visibility"} className="!text-[19px]" />}
+                </button>
+              )}
               <a
                 href={`${repoUrl}/blob/${branch}/${entry.path}`}
                 target="_blank"

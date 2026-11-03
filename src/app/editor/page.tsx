@@ -22,14 +22,17 @@ import { rebaseOntoOriginal } from "@/lib/editor/rebase";
 import { altFromFile, prepareImage, type PendingUpload } from "@/lib/editor/images";
 import {
   asString,
+  deepEqual,
   parseContent,
   parseFields,
-  stringifyContent,
+  setPath,
   stringifyFields,
   type FrontMatter,
   type FrontMatterFormat,
 } from "@/lib/frontmatter";
 import { sectionLabel, sectionOf, sitePathToRepoPath, slugify } from "@/lib/content";
+import { draftKey, readDraft, writeDraft, type StoredDraft } from "@/lib/drafts";
+import { buildFile, saveFile } from "@/lib/save";
 
 /** What the file looked like when it was loaded (or last saved), used for change detection and conflict checks. */
 interface Original {
@@ -38,18 +41,7 @@ interface Original {
   prefix: string; // front matter block, verbatim
   body: string; // markdown body, verbatim
   normalizedBody: string; // the same body after a pass through the rich editor
-  fmJson: string;
-}
-
-interface StoredDraft {
-  savedAt: number;
-  baseSha: string | null;
-  format: FrontMatterFormat;
   fm: FrontMatter;
-  folder: string;
-  fileName: string | null;
-  body: string;
-  uploads: PendingUpload[];
 }
 
 const DESKTOP = "(min-width: 1024px)";
@@ -59,29 +51,11 @@ function subscribeDesktop(onChange: () => void) {
   return () => mq.removeEventListener("change", onChange);
 }
 
-const draftKey = (repo: string, path: string | null) => `hugoflow:draft:${repo}:${path ?? "new"}`;
+const BASE_MANAGED = ["title", "date", "draft", "tags"];
 
-function readDraft(key: string): StoredDraft | null {
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as StoredDraft) : null;
-  } catch {
-    return null;
-  }
-}
-
-function writeDraft(key: string, draft: StoredDraft | null) {
-  try {
-    if (draft) localStorage.setItem(key, JSON.stringify(draft));
-    else localStorage.removeItem(key);
-  } catch (e) {
-    // Usually the storage quota (large images). The editor still works; only crash recovery is lost.
-    console.warn("Could not store local draft", e);
-  }
-}
-
-function omit(fm: FrontMatter, keys: Set<string>): FrontMatter {
-  return Object.fromEntries(Object.entries(fm).filter(([k]) => !keys.has(k)));
+/** Front matter minus the fields that have their own inputs; dotted paths reach into tables. */
+function omitPaths(fm: FrontMatter, paths: string[]): FrontMatter {
+  return paths.reduce((acc, path) => setPath(acc, path, undefined), fm);
 }
 
 interface ResolverContext {
@@ -217,7 +191,7 @@ function EditorScreen() {
     onUpdate: () => setContentVersion((v) => v + 1),
   });
 
-  const managedKeys = useMemo(() => new Set(["title", "date", "draft", "tags", descriptionKey, imageKey]), [descriptionKey, imageKey]);
+  const managedKeys = useMemo(() => new Set([...BASE_MANAGED, descriptionKey, imageKey]), [descriptionKey, imageKey]);
   const isNew = !original;
   const isBundle = !!fileName && /^_?index$/.test(fileName) && !isNew;
   const isPostsSection = folder === settings.postsSection;
@@ -254,7 +228,7 @@ function EditorScreen() {
     setFm(data);
     setDescriptionKey(desc);
     setImageKey(img);
-    setOtherText(stringifyFields(fmt, omit(data, new Set(["title", "date", "draft", "tags", desc, img]))));
+    setOtherText(stringifyFields(fmt, omitPaths(data, [...BASE_MANAGED, desc, img])));
     setOtherError(null);
   }, []);
 
@@ -297,22 +271,22 @@ function EditorScreen() {
             prefix: parsed.prefix,
             body: parsed.body,
             normalizedBody,
-            fmJson: JSON.stringify(parsed.data),
+            fm: parsed.data,
           });
           const draft = readDraft(draftKey(settings.repository, editPath));
           if (draft) setDraftOffer(draft);
         } else {
           const section = newSection || settings.postsSection;
-          const isPosts = section === settings.postsSection;
           ctxRef.current.dir = section;
+          const isPosts = section === settings.postsSection;
           const formats = (site?.entries ?? []).filter((e) => e.section === section && e.format !== "none").map((e) => e.format);
           const fmt = formats.length ? (formats.sort((a, b) => formats.filter((f) => f === b).length - formats.filter((f) => f === a).length)[0] as FrontMatterFormat) : "toml";
           applyFrontMatter(fmt, isPosts ? { title: "", date: new Date().toISOString() } : { title: "" });
           setOriginalKeys([]);
-          setFolder(section);
-          setFileName(null);
           setMarkdown("");
           setEditorMarkdown("");
+          setFolder(section);
+          setFileName(null);
           setOriginal(null);
           const draft = readDraft(draftKey(settings.repository, null));
           if (draft) setDraftOffer(draft);
@@ -333,7 +307,7 @@ function EditorScreen() {
       if (!completed) loadedKeyRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reload only when the target file changes
-  }, [editor, isLoaded, settings.repository, loadKey]);
+  }, [editor, isLoaded, settings.repository, loadKey, !!site]);
 
   useEffect(() => {
     if (status === "unauthenticated" || (isLoaded && !settings.repository)) router.replace("/");
@@ -347,7 +321,7 @@ function EditorScreen() {
     [loadState, getBody, contentVersion]
   );
   const bodyChanged = original ? currentBody !== original.body && currentBody !== original.normalizedBody : currentBody.trim() !== "";
-  const fmChanged = original ? JSON.stringify(fm) !== original.fmJson : asString(fm.title).trim() !== "";
+  const fmChanged = original ? !deepEqual(fm, original.fm) : asString(fm.title).trim() !== "";
   const dirty = loadState === "ready" && (bodyChanged || fmChanged || (!!original && path !== original.path));
   const hasImageRows = currentBody.includes('class="image-row"');
 
@@ -378,6 +352,7 @@ function EditorScreen() {
     if (!draftOffer) return;
     setPendingUploads(draftOffer.uploads ?? []);
     applyFrontMatter(draftOffer.format, draftOffer.fm);
+    setOriginalKeys((keys) => Array.from(new Set([...keys, ...Object.keys(draftOffer.fm)])));
     setFolder(draftOffer.folder);
     ctxRef.current.dir = draftOffer.folder;
     setFileName(draftOffer.fileName);
@@ -446,8 +421,8 @@ function EditorScreen() {
     // Keep untouched parts of the file exactly as they were, so commits only show real edits.
     else if (original && viewMode === "rich") bodyOut = rebaseOntoOriginal(original.body, original.normalizedBody, body, roundTrip);
     bodyOut = bodyOut.replace(/\s*$/, "\n");
-    if (original && JSON.stringify(fm) === original.fmJson) return original.prefix + bodyOut;
-    return stringifyContent(format, fm, bodyOut);
+    if (original && deepEqual(fm, original.fm)) return original.prefix + bodyOut;
+    return buildFile(format, fm, bodyOut, original ? { prefix: original.prefix, data: original.fm } : null);
   };
 
   const save = async () => {
@@ -476,28 +451,24 @@ function EditorScreen() {
         : `Update ${title ? `"${title}"` : path}`;
 
     try {
-      const res = await fetch("/api/github/save", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          repository: settings.repository,
-          branch,
-          message,
-          path,
-          content,
-          originalPath: original?.path ?? null,
-          originalSha: original?.sha ?? null,
-          uploads: used.map((u) => ({ path: u.repoPath, base64: u.dataUrl })),
-        }),
+      const data = await saveFile({
+        repository: settings.repository,
+        branch,
+        message,
+        path,
+        content,
+        originalPath: original?.path ?? null,
+        originalSha: original?.sha ?? null,
+        uploads: used.map((u) => ({ path: u.repoPath, base64: u.dataUrl })),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Save failed");
 
       writeDraft(draftKey(settings.repository, original?.path ?? null), null);
       const parsed = parseContent(content);
-      ctxRef.current.dir = folder;
+      const savedDir = path.split("/").slice(0, -1).join("/");
+      ctxRef.current.dir = savedDir;
+      setFolder(savedDir);
       setPendingUploads(uploadsRef.current.filter((u) => !used.includes(u)));
-      setOriginal({ path, sha: data.fileSha, prefix: parsed.prefix, body: parsed.body, normalizedBody: body, fmJson: JSON.stringify(fm) });
+      setOriginal({ path, sha: data.fileSha, prefix: parsed.prefix, body: parsed.body, normalizedBody: body, fm: parsed.data });
       setOriginalKeys(Object.keys(fm));
       setFileName(effectiveFileName);
       if (editPath !== path) {
@@ -778,7 +749,7 @@ function EditorScreen() {
             )}
 
             <textarea
-              className="w-full resize-none overflow-hidden bg-transparent font-display text-[32px] sm:text-[40px] font-bold leading-tight tracking-tight text-on-surface placeholder:text-on-surface-variant/40 outline-none"
+              className="w-full resize-none overflow-hidden bg-transparent font-display text-[32px] sm:text-[40px] font-bold leading-tight tracking-tight text-on-surface placeholder:text-on-surface-variant/40 outline-hidden"
               placeholder="Title"
               rows={1}
               value={asString(fm.title)}
@@ -876,7 +847,7 @@ function EditorScreen() {
               {viewMode === "markdown" && (
                 <textarea
                   ref={textareaRef}
-                  className="w-full min-h-[60vh] resize-none bg-transparent font-mono text-[14px] leading-[1.7] text-on-surface outline-none pb-[30vh]"
+                  className="w-full min-h-[60vh] resize-none bg-transparent font-mono text-[14px] leading-[1.7] text-on-surface outline-hidden pb-[30vh]"
                   value={markdown}
                   onChange={(e) => {
                     setMarkdown(e.target.value);

@@ -1,6 +1,6 @@
 import { Octokit } from "@octokit/rest";
 import { parseContent, asString, asStringArray } from "./frontmatter";
-import { IMAGE_EXT, sectionOf, type ContentEntry, type MediaEntry, type SiteInfo } from "./content";
+import { IMAGE_EXT, contentBaseName, sectionOf, type ContentEntry, type MediaEntry, type SiteInfo } from "./content";
 
 export function getOctokit(accessToken: string) {
   return new Octokit({ auth: accessToken });
@@ -106,6 +106,7 @@ export async function getSiteInfo(
       tags: [],
       format: "none",
       isIndex: name === "_index.md" || name === "index.md",
+      baseName: contentBaseName(b.path),
     };
     const text = texts.get(b.path);
     if (text !== undefined) {

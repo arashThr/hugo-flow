@@ -1,6 +1,4 @@
 import type { Config } from "tailwindcss";
-import forms from "@tailwindcss/forms";
-import containerQueries from "@tailwindcss/container-queries";
 import typography from "@tailwindcss/typography";
 
 const config: Config = {
@@ -46,16 +44,6 @@ const config: Config = {
         xl: "1.5rem",
         full: "9999px",
       },
-      spacing: {
-        md: "16px",
-        xs: "4px",
-        lg: "24px",
-        base: "4px",
-        "editor-width": "800px",
-        sm: "8px",
-        xl: "48px",
-        "container-max": "1200px",
-      },
       fontFamily: {
         "body-md": ["var(--font-inter)", "sans-serif"],
         "headline-md": ["var(--font-manrope)", "sans-serif"],
@@ -85,8 +73,6 @@ const config: Config = {
     },
   },
   plugins: [
-    forms({ strategy: "class" }),
-    containerQueries,
     typography,
   ],
 };

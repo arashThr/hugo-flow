@@ -11,6 +11,7 @@ export interface ContentEntry {
   tags: string[];
   format: FrontMatterFormat;
   isIndex: boolean; // _index.md / index.md
+  baseName: string; // Hugo's .File.ContentBaseName: the file name, or the folder for bundles
 }
 
 export interface MediaEntry {
@@ -38,6 +39,18 @@ export function slugify(text: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)+/g, "");
+}
+
+/** Hugo's .File.ContentBaseName: "content/aie/foo.md" -> "foo", "content/aie/foo/index.md" -> "foo". */
+export function contentBaseName(path: string): string {
+  const parts = path.split("/");
+  const name = (parts.pop() || "").replace(/\.(md|markdown)$/i, "");
+  return name === "index" || name === "_index" ? parts.pop() || name : name;
+}
+
+/** "content/aie" -> "aie", used in commit messages. */
+export function sectionName(section: string, contentDir: string): string {
+  return section === contentDir ? "pages" : section.slice(contentDir.length + 1);
 }
 
 export function sectionOf(path: string, contentDir: string): string {
