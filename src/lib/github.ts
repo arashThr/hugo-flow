@@ -1,7 +1,6 @@
 import { Octokit } from "@octokit/rest";
-import { parseContent, asString, asStringArray, getPath } from "./frontmatter";
+import { parseContent, asString, asStringArray } from "./frontmatter";
 import { IMAGE_EXT, contentBaseName, sectionOf, type ContentEntry, type MediaEntry, type SiteInfo } from "./content";
-import { archetypePaths, loadArchetype, matchArchetype, trackedFields, type ArchetypeSource } from "./archetypes";
 
 export function getOctokit(accessToken: string) {
   return new Octokit({ auth: accessToken });
@@ -86,21 +85,14 @@ export async function getSiteInfo(
   const markdown = blobs.filter((b) => b.path.startsWith(contentPrefix) && /\.(md|markdown)$/i.test(b.path));
   const configs = blobs.filter((b) => CONFIG_RE.test(b.path));
   const layouts = blobs.filter((b) => b.path.startsWith("layouts/") && /\.(html|xml)$/.test(b.path));
-  const archetypeFiles = archetypePaths(blobs.map((b) => b.path));
 
   const texts = await readTextFiles(
     octokit,
     owner,
     repo,
     commitSha,
-    [...markdown, ...configs, ...layouts].map((b) => b.path).concat(archetypeFiles.map((a) => a.path))
+    [...markdown, ...configs, ...layouts].map((b) => b.path)
   );
-
-  const archetypes: ArchetypeSource[] = archetypeFiles
-    .filter((a) => texts.has(a.path))
-    .map((a) => ({ ...a, source: texts.get(a.path) as string }));
-  const loaded = archetypes.map((a) => loadArchetype(a)).filter((a) => !a.error);
-  const tracked = trackedFields(loaded);
 
   const entries: ContentEntry[] = markdown.map((b) => {
     const name = b.path.split("/").pop() || "";
@@ -115,8 +107,6 @@ export async function getSiteInfo(
       format: "none",
       isIndex: name === "_index.md" || name === "index.md",
       baseName: contentBaseName(b.path),
-      archetype: null,
-      fields: {},
     };
     const text = texts.get(b.path);
     if (text !== undefined) {
@@ -127,12 +117,6 @@ export async function getSiteInfo(
         entry.date = asString(data.date) || null;
         entry.draft = data.draft === true || data.draft === "true";
         entry.tags = asStringArray(data.tags);
-        for (const path of tracked) {
-          const value = getPath(data, path);
-          // Long text (summaries) isn't needed to tell kinds or references apart.
-          if (value !== undefined && !(typeof value === "string" && value.length > 200)) entry.fields[path] = value;
-        }
-        if (name !== "_index.md") entry.archetype = matchArchetype(data, loaded)?.name ?? null;
       } catch {
         // Unparseable front matter: still list the file so it can be fixed in the editor.
       }
@@ -170,7 +154,6 @@ export async function getSiteInfo(
     configPath: configs[0]?.path ?? null,
     entries,
     media,
-    archetypes,
   };
 }
 

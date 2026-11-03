@@ -2,7 +2,6 @@
 
 import { useState, type ReactNode } from "react";
 import { TagInput } from "@/components/TagInput";
-import { RefPicker, type RefOption } from "@/components/editor/RefPicker";
 import { Icon, Modal, Spinner } from "@/components/ui";
 import { asString, asStringArray, type FrontMatter, type FrontMatterFormat } from "@/lib/frontmatter";
 import { fromLocalInput, toLocalInput } from "@/lib/content";
@@ -38,8 +37,6 @@ interface Props {
   otherError: string | null;
   onDelete?: () => void;
   githubUrl?: string;
-  kind?: { value: string; options: { value: string; label: string }[]; onChange: (value: string) => void };
-  refs?: { path: string; value: string[]; options: RefOption[]; targetLabel: string; onChange: (value: string[]) => void }[];
 }
 
 function Section({ title, children, action }: { title: string; children: ReactNode; action?: ReactNode }) {
@@ -100,20 +97,6 @@ export function EditorSidebar(props: Props) {
 
           <Section title="Details">
             <div className="space-y-4">
-              {props.kind && (
-                <label className="block">
-                  <span className="field-label">Kind</span>
-                  <select className="field" value={props.kind.value} onChange={(e) => props.kind!.onChange(e.target.value)}>
-                    {!props.kind.options.some((o) => o.value === props.kind!.value) && <option value={props.kind.value}>{props.kind.value || "—"}</option>}
-                    {props.kind.options.map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              )}
-
               {props.showDate || fm.date !== undefined ? (
                 <label className="block">
                   <span className="field-label">Date</span>
@@ -172,12 +155,6 @@ export function EditorSidebar(props: Props) {
                 />
               </div>
 
-              {props.refs?.map((ref) => (
-                <div key={ref.path}>
-                  <span className="field-label">{ref.path.split(".").pop()!.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase())}</span>
-                  <RefPicker value={ref.value} options={ref.options} onChange={ref.onChange} placeholder={`Link ${ref.targetLabel}…`} />
-                </div>
-              ))}
             </div>
           </Section>
 
