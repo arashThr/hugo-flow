@@ -22,9 +22,7 @@ import { rebaseOntoOriginal } from "@/lib/editor/rebase";
 import { altFromFile, prepareImage, type PendingUpload } from "@/lib/editor/images";
 import {
   asString,
-  asStringArray,
   deepEqual,
-  getPath,
   parseContent,
   parseFields,
   setPath,
@@ -32,11 +30,9 @@ import {
   type FrontMatter,
   type FrontMatterFormat,
 } from "@/lib/frontmatter";
-import { sectionLabel, sectionName, sectionOf, sitePathToRepoPath, slugify } from "@/lib/content";
-import { archetypeCommitMessage, archetypeSection, loadArchetype, matchArchetype, switchArchetype } from "@/lib/archetypes";
+import { sectionLabel, sectionOf, sitePathToRepoPath, slugify } from "@/lib/content";
 import { draftKey, readDraft, writeDraft, type StoredDraft } from "@/lib/drafts";
 import { buildFile, saveFile } from "@/lib/save";
-import { useArchetypes } from "@/components/useArchetypes";
 
 /** What the file looked like when it was loaded (or last saved), used for change detection and conflict checks. */
 interface Original {
@@ -46,14 +42,6 @@ interface Original {
   body: string; // markdown body, verbatim
   normalizedBody: string; // the same body after a pass through the rich editor
   fm: FrontMatter;
-}
-
-/** A new post's starting point: the archetype's front matter block, which saving patches. */
-interface Template {
-  name: string;
-  prefix: string;
-  data: FrontMatter;
-  bundle: boolean;
 }
 
 const DESKTOP = "(min-width: 1024px)";
@@ -112,19 +100,15 @@ function EditorScreen() {
   const { status } = useSession();
   const { settings, isLoaded } = useSettings();
   const { site, refresh } = useSite();
-  const arch = useArchetypes();
   const toast = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
   const editPath = searchParams.get("path");
   const newSection = searchParams.get("new");
-  const archetypeParam = searchParams.get("archetype");
-  const restoreParam = searchParams.get("restore") === "1";
 
   const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
   const [loadError, setLoadError] = useState<string | null>(null);
   const [original, setOriginal] = useState<Original | null>(null);
-  const [template, setTemplate] = useState<Template | null>(null);
   const [format, setFormat] = useState<FrontMatterFormat>("toml");
   const [fm, setFm] = useState<FrontMatter>({});
   const [originalKeys, setOriginalKeys] = useState<string[]>([]);
@@ -156,9 +140,6 @@ function EditorScreen() {
   const uploadsRef = useRef<PendingUpload[]>([]);
   const ctxRef = useRef<ResolverContext>({ repository: "", branch: "", dir: "" });
   const loadedKeyRef = useRef<string | null>(null);
-  // Fields edited by their own inputs (kind select, reference pickers), kept out of "Other front matter".
-  const extraManaged = useMemo(() => [...arch.kinds.map((k) => k.path), ...arch.refs.keys()], [arch]);
-  const extraManagedRef = useRef<string[]>(extraManaged);
 
   const branch = site?.branch ?? settings.branch;
   useEffect(() => {
@@ -210,13 +191,9 @@ function EditorScreen() {
     onUpdate: () => setContentVersion((v) => v + 1),
   });
 
-  const managedKeys = useMemo(
-    () => new Set([...BASE_MANAGED, descriptionKey, imageKey, ...extraManaged.filter((p) => !p.includes("."))]),
-    [descriptionKey, imageKey, extraManaged]
-  );
+  const managedKeys = useMemo(() => new Set([...BASE_MANAGED, descriptionKey, imageKey]), [descriptionKey, imageKey]);
   const isNew = !original;
   const isBundle = !!fileName && /^_?index$/.test(fileName) && !isNew;
-  const isNewBundle = isNew && !!template?.bundle;
   const isPostsSection = folder === settings.postsSection;
 
   const autoFileName = useMemo(() => {
@@ -226,7 +203,7 @@ function EditorScreen() {
     return isPostsSection && date ? `${new Date(date).toISOString().slice(0, 10)}-${slug}` : slug;
   }, [fm.title, fm.date, isPostsSection]);
   const effectiveFileName = fileName ?? autoFileName;
-  const path = isNewBundle ? `${folder}/${effectiveFileName}/index.md` : `${folder}/${effectiveFileName}.md`;
+  const path = `${folder}/${effectiveFileName}.md`;
 
   const setEditorMarkdown = useCallback(
     (md: string) => {
@@ -251,15 +228,14 @@ function EditorScreen() {
     setFm(data);
     setDescriptionKey(desc);
     setImageKey(img);
-    setOtherText(stringifyFields(fmt, omitPaths(data, [...BASE_MANAGED, desc, img, ...extraManagedRef.current])));
+    setOtherText(stringifyFields(fmt, omitPaths(data, [...BASE_MANAGED, desc, img])));
     setOtherError(null);
   }, []);
 
-  const loadKey = editPath ? `path:${editPath}` : `new:${newSection ?? ""}:${archetypeParam ?? ""}`;
+  const loadKey = editPath ? `path:${editPath}` : `new:${newSection ?? ""}`;
 
   useEffect(() => {
     if (!editor || !isLoaded || !settings.repository) return;
-    if (archetypeParam && !editPath && !site) return; // archetypes come with the site index
     if (loadedKeyRef.current === loadKey) return;
     loadedKeyRef.current = loadKey;
     let cancelled = false;
@@ -297,48 +273,23 @@ function EditorScreen() {
             normalizedBody,
             fm: parsed.data,
           });
-          setTemplate(null);
           const draft = readDraft(draftKey(settings.repository, editPath));
           if (draft) setDraftOffer(draft);
         } else {
-          const source = archetypeParam ? site?.archetypes.find((a) => a.name === archetypeParam) : undefined;
-          const archetype = source ? loadArchetype(source) : null;
-          const section =
-            newSection || (archetype ? archetypeSection(archetype.name, site?.entries ?? [], settings.postsSection) : settings.postsSection);
+          const section = newSection || settings.postsSection;
           ctxRef.current.dir = section;
-          if (archetype && !archetype.error) {
-            // Start from the archetype's own text so the new file looks like `hugo new content --kind`.
-            applyFrontMatter(archetype.format, archetype.data);
-            setOriginalKeys(Object.keys(archetype.data));
-            setTemplate({ name: archetype.name, prefix: archetype.prefix, data: archetype.data, bundle: archetype.bundle });
-            setMarkdown(archetype.body);
-            setEditorMarkdown(archetype.body);
-          } else {
-            if (archetype?.error) toast(`Couldn't read ${archetype.path}: ${archetype.error}`, "error");
-            const isPosts = section === settings.postsSection;
-            const formats = (site?.entries ?? []).filter((e) => e.section === section && e.format !== "none").map((e) => e.format);
-            const fmt = formats.length ? (formats.sort((a, b) => formats.filter((f) => f === b).length - formats.filter((f) => f === a).length)[0] as FrontMatterFormat) : "toml";
-            applyFrontMatter(fmt, isPosts ? { title: "", date: new Date().toISOString() } : { title: "" });
-            setOriginalKeys([]);
-            setTemplate(null);
-            setMarkdown("");
-            setEditorMarkdown("");
-          }
+          const isPosts = section === settings.postsSection;
+          const formats = (site?.entries ?? []).filter((e) => e.section === section && e.format !== "none").map((e) => e.format);
+          const fmt = formats.length ? (formats.sort((a, b) => formats.filter((f) => f === b).length - formats.filter((f) => f === a).length)[0] as FrontMatterFormat) : "toml";
+          applyFrontMatter(fmt, isPosts ? { title: "", date: new Date().toISOString() } : { title: "" });
+          setOriginalKeys([]);
+          setMarkdown("");
+          setEditorMarkdown("");
           setFolder(section);
           setFileName(null);
           setOriginal(null);
           const draft = readDraft(draftKey(settings.repository, null));
-          if (draft && restoreParam) {
-            // Handed over from quick capture: continue straight away.
-            setPendingUploads(draft.uploads ?? []);
-            applyFrontMatter(draft.format, draft.fm);
-            setOriginalKeys((keys) => Array.from(new Set([...keys, ...Object.keys(draft.fm)])));
-            setFolder(draft.folder);
-            ctxRef.current.dir = draft.folder;
-            setFileName(draft.fileName);
-            setMarkdown(draft.body);
-            setEditorMarkdown(draft.body);
-          } else if (draft) setDraftOffer(draft);
+          if (draft) setDraftOffer(draft);
         }
         completed = true;
         setLoadState("ready");
@@ -357,16 +308,6 @@ function EditorScreen() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reload only when the target file changes
   }, [editor, isLoaded, settings.repository, loadKey, !!site]);
-
-  // Once the archetypes are known, fields with their own inputs leave the raw "Other front matter" box.
-  const extraKey = extraManaged.join("|");
-  useEffect(() => {
-    extraManagedRef.current = extraManaged;
-    if (loadState !== "ready") return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- derived text for the raw editor
-    setOtherText(stringifyFields(format, omitPaths(fm, [...BASE_MANAGED, descriptionKey, imageKey, ...extraManaged])));
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only when the set of managed fields changes
-  }, [extraKey, loadState]);
 
   useEffect(() => {
     if (status === "unauthenticated" || (isLoaded && !settings.repository)) router.replace("/");
@@ -392,12 +333,12 @@ function EditorScreen() {
       writeDraft(
         key,
         dirty
-          ? { savedAt: Date.now(), baseSha: original?.sha ?? null, format, fm, folder, fileName, body: currentBody, uploads: uploadsRef.current, archetype: template?.name }
+          ? { savedAt: Date.now(), baseSha: original?.sha ?? null, format, fm, folder, fileName, body: currentBody, uploads: uploadsRef.current }
           : null
       );
     }, 800);
     return () => clearTimeout(timer);
-  }, [dirty, currentBody, fm, folder, fileName, format, uploads, loadState, draftOffer, original, settings.repository, template]);
+  }, [dirty, currentBody, fm, folder, fileName, format, uploads, loadState, draftOffer, original, settings.repository]);
 
   useEffect(() => {
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
@@ -459,18 +400,8 @@ function EditorScreen() {
         else if (k in parsed) next[k] = parsed[k];
       }
       for (const k of Object.keys(parsed)) if (!(k in next) && !managedKeys.has(k)) next[k] = parsed[k];
-      // Nested fields with their own inputs (e.g. params.kind) aren't in the text; carry them over.
-      return extraManaged.filter((p) => p.includes(".")).reduce((acc, p) => (getPath(prev, p) === undefined ? acc : setPath(acc, p, getPath(prev, p))), next);
+      return next;
     });
-  };
-
-  /** Turn the post into another archetype (TIL -> essay), adding the fields it needs. */
-  const switchKind = (targetName: string) => {
-    const target = arch.byName(targetName);
-    if (!target) return;
-    const next = switchArchetype(fm, matchArchetype(fm, arch.archetypes), target);
-    applyFrontMatter(format, next);
-    setOriginalKeys((keys) => Array.from(new Set([...keys, ...Object.keys(next)])));
   };
 
   /* ---------- Saving ---------- */
@@ -491,8 +422,7 @@ function EditorScreen() {
     else if (original && viewMode === "rich") bodyOut = rebaseOntoOriginal(original.body, original.normalizedBody, body, roundTrip);
     bodyOut = bodyOut.replace(/\s*$/, "\n");
     if (original && deepEqual(fm, original.fm)) return original.prefix + bodyOut;
-    // Only the front matter lines that changed are rewritten; new posts patch the archetype's block.
-    return buildFile(format, fm, bodyOut, original ? { prefix: original.prefix, data: original.fm } : template);
+    return buildFile(format, fm, bodyOut, original ? { prefix: original.prefix, data: original.fm } : null);
   };
 
   const save = async () => {
@@ -514,19 +444,11 @@ function EditorScreen() {
     // Only images that are still in the page get committed; removed ones never reach the repo.
     const used = uploadsRef.current.filter((u) => content.includes(u.sitePath));
     const title = asString(fm.title);
-    const kind = matchArchetype(fm, arch.archetypes);
-    const message = kind
-      ? archetypeCommitMessage(
-          !original ? "add" : original.path !== path ? "rename" : "update",
-          sectionName(sectionOf(path, settings.contentDir), settings.contentDir),
-          kind.label,
-          title || effectiveFileName
-        )
-      : !original
-        ? `Add ${title ? `"${title}"` : path}`
-        : original.path !== path
-          ? `Rename ${original.path} to ${path}`
-          : `Update ${title ? `"${title}"` : path}`;
+    const message = !original
+      ? `Add ${title ? `"${title}"` : path}`
+      : original.path !== path
+        ? `Rename ${original.path} to ${path}`
+        : `Update ${title ? `"${title}"` : path}`;
 
     try {
       const data = await saveFile({
@@ -542,14 +464,13 @@ function EditorScreen() {
 
       writeDraft(draftKey(settings.repository, original?.path ?? null), null);
       const parsed = parseContent(content);
-      const savedDir = path.split("/").slice(0, -1).join("/"); // a new bundle's own folder
+      const savedDir = path.split("/").slice(0, -1).join("/");
       ctxRef.current.dir = savedDir;
       setFolder(savedDir);
       setPendingUploads(uploadsRef.current.filter((u) => !used.includes(u)));
       setOriginal({ path, sha: data.fileSha, prefix: parsed.prefix, body: parsed.body, normalizedBody: body, fm: parsed.data });
-      setTemplate(null);
       setOriginalKeys(Object.keys(fm));
-      setFileName(isNewBundle ? "index" : effectiveFileName);
+      setFileName(effectiveFileName);
       if (editPath !== path) {
         loadedKeyRef.current = `path:${path}`;
         window.history.replaceState(null, "", `/editor?path=${encodeURIComponent(path)}`);
@@ -730,20 +651,6 @@ function EditorScreen() {
     return Array.from(set).sort();
   }, [site, settings.postsSection, folder]);
   const featured = asString(fm[imageKey]);
-  const currentKind = matchArchetype(fm, arch.archetypes);
-  const kindField = arch.kinds.find((k) => getPath(fm, k.path) !== undefined);
-  const refFields = [...arch.refs]
-    .filter(([p]) => getPath(fm, p) !== undefined || currentKind?.fields.includes(p))
-    .map(([p, { targets }]) => ({
-      path: p,
-      value: asStringArray(getPath(fm, p)),
-      targetLabel: targets.map((t) => arch.byName(t)?.label ?? t).join(" or ") || "posts",
-      options: (site?.entries ?? [])
-        .filter((e) => e.section === section && !e.path.endsWith("/_index.md") && e.path !== original?.path)
-        .filter((e) => !targets.length || targets.includes(e.archetype ?? ""))
-        .map((e) => ({ baseName: e.baseName, title: e.title, date: e.date, draft: e.draft })),
-      onChange: (v: string[]) => setFm((prev) => setPath(prev, p, v)),
-    }));
   const isDraft = fm.draft === true;
   const saveLabel = isNew ? (isDraft ? "Save draft" : "Publish") : "Save";
 
@@ -984,8 +891,6 @@ function EditorScreen() {
           otherError={otherError}
           onDelete={original ? () => setDeleteOpen(true) : undefined}
           githubUrl={original ? `https://github.com/${settings.repository}/blob/${branch}/${original.path}` : undefined}
-          kind={kindField && { value: asString(getPath(fm, kindField.path)), options: kindField.options, onChange: (v) => switchKind(kindField.options.find((o) => o.value === v)!.archetype) }}
-          refs={refFields}
         />
       </div>
 

@@ -2,14 +2,14 @@ import { describe, expect, it } from "vitest";
 import { parseContent, setPath, stringifyContent, type FrontMatter } from "./frontmatter";
 import { patchFrontMatter } from "./fmpatch";
 
-// Real files from the blog: a TOML TIL with a [params] table, and an older YAML post.
-const TOML_TIL = `+++
+// Realistic content files with nested front matter and existing formatting.
+const TOML_POST = `+++
 title = "What an embedding is"
 date = "2026-10-14T09:00:00Z"
 draft = true
 tags = ["ai", "embeddings"]
 [params]
-  kind = "til"
+  category = "technical"
 +++
 
 An embedding is a list of numbers that stands in for a piece of text.
@@ -61,8 +61,8 @@ description: >-
   Folded text
   over two lines.
 params:
-  kind: essay
-  builds_on:
+  category: technical
+  related_pages:
     - a
     - b
 ---
@@ -86,7 +86,7 @@ function changedLines(a: string, b: string) {
 
 describe("front matter round trip", () => {
   it.each([
-    ["TOML TIL", TOML_TIL],
+    ["TOML post", TOML_POST],
     ["YAML post", YAML_POST],
     ["tricky TOML", TOML_TRICKY],
     ["tricky YAML", YAML_TRICKY],
@@ -95,13 +95,13 @@ describe("front matter round trip", () => {
   });
 
   it("TOML: changing one field rewrites one line", () => {
-    const out = save(TOML_TIL, (fm) => ({ ...fm, draft: false }));
-    expect(changedLines(TOML_TIL, out)).toEqual({ removed: ["draft = true"], added: ["draft = false"] });
+    const out = save(TOML_POST, (fm) => ({ ...fm, draft: false }));
+    expect(changedLines(TOML_POST, out)).toEqual({ removed: ["draft = true"], added: ["draft = false"] });
   });
 
   it("TOML: nested [params] edit stays inside the table, indentation kept", () => {
-    const out = save(TOML_TIL, (fm) => setPath(fm, "params.kind", "essay"));
-    expect(changedLines(TOML_TIL, out)).toEqual({ removed: ['  kind = "til"'], added: ['  kind = "essay"'] });
+    const out = save(TOML_POST, (fm) => setPath(fm, "params.category", "reference"));
+    expect(changedLines(TOML_POST, out)).toEqual({ removed: ['  category = "technical"'], added: ['  category = "reference"'] });
   });
 
   it("TOML: keeps quote style, trailing comments, unquoted dates and untouched multi-line values", () => {
@@ -125,8 +125,8 @@ describe("front matter round trip", () => {
   });
 
   it("TOML: new root keys go before the first table, new table keys inside it", () => {
-    const out = save(TOML_TIL, (fm) => setPath({ ...fm, summary: "Short" }, "params.series", "aie"));
-    expect(out).toContain('tags = ["ai", "embeddings"]\nsummary = "Short"\n[params]\n  kind = "til"\n  series = "aie"\n+++');
+    const out = save(TOML_POST, (fm) => setPath({ ...fm, summary: "Short" }, "params.series", "aie"));
+    expect(out).toContain('tags = ["ai", "embeddings"]\nsummary = "Short"\n[params]\n  category = "technical"\n  series = "aie"\n+++');
   });
 
   it("TOML: removing a key deletes only its lines", () => {
@@ -161,8 +161,8 @@ describe("front matter round trip", () => {
   });
 
   it("YAML: nested edits and additions stay in their map", () => {
-    const out = save(YAML_TRICKY, (fm) => setPath(setPath(fm, "params.kind", "til"), "params.builds_on", ["a", "c"]));
-    expect(out).toContain("params:\n  kind: til\n  builds_on:\n    - a\n    - c\n---");
+    const out = save(YAML_TRICKY, (fm) => setPath(setPath(fm, "params.category", "reference"), "params.related_pages", ["a", "c"]));
+    expect(out).toContain("params:\n  category: reference\n  related_pages:\n    - a\n    - c\n---");
     expect(out).toContain("description: >-\n  Folded text\n  over two lines.\n");
   });
 
@@ -172,7 +172,7 @@ describe("front matter round trip", () => {
   });
 
   it("falls back (null) rather than guess on CRLF files, and the full rewrite still works", () => {
-    const crlf = TOML_TIL.replace(/\n/g, "\r\n");
+    const crlf = TOML_POST.replace(/\n/g, "\r\n");
     const parsed = parseContent(crlf);
     expect(patchFrontMatter(parsed.prefix, "toml", parsed.data, { ...parsed.data, draft: false })).toBeNull();
     expect(stringifyContent("toml", { ...parsed.data, draft: false }, parsed.body)).toContain("draft = false");

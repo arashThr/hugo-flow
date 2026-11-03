@@ -11,7 +11,6 @@ export interface StoredDraft {
   fileName: string | null;
   body: string;
   uploads: PendingUpload[];
-  archetype?: string; // new posts started from an archetype
 }
 
 export const draftKey = (repo: string, path: string | null) => `hugoflow:draft:${repo}:${path ?? "new"}`;

@@ -25,8 +25,8 @@ export async function saveFile(req: SaveRequest): Promise<{ url?: string; fileSh
 }
 
 /**
- * The full file: front matter written on top of `base` (the block as it is in the file, or the
- * archetype's) so only changed lines differ, falling back to a full rewrite if patching isn't safe.
+ * The full file: front matter written on top of the original block so only changed lines differ,
+ * falling back to a full rewrite if patching isn't safe.
  */
 export function buildFile(format: FrontMatterFormat, data: FrontMatter, body: string, base: { prefix: string; data: FrontMatter } | null): string {
   const content = body.replace(/^\n+/, "").replace(/\s*$/, "\n");

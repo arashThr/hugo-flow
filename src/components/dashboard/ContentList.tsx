@@ -3,12 +3,9 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Badge, Icon, Spinner } from "@/components/ui";
-import { fileLabel, formatDate, sectionLabel, sectionName, type ContentEntry } from "@/lib/content";
+import { fileLabel, formatDate, sectionLabel, type ContentEntry } from "@/lib/content";
 import type { Settings } from "@/components/SettingsProvider";
 import { useToast } from "@/components/Toast";
-import { useArchetypes } from "@/components/useArchetypes";
-import { archetypeCommitMessage, archetypeSection, kindArchetypes, sectionArchetype } from "@/lib/archetypes";
-import { NewMenu, type NewMenuItem } from "@/components/dashboard/NewMenu";
 import { toggleDraft } from "@/lib/save";
 
 type Filter = "all" | "published" | "drafts";
@@ -29,11 +26,9 @@ const PAGE_SIZE = 40;
 export function ContentList({ section, entries, settings, loading, repoUrl, branch, onChanged }: Props) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
-  const [kind, setKind] = useState<string>("all");
   const [sort, setSort] = useState<Sort>("newest");
   const [visible, setVisible] = useState(PAGE_SIZE);
   const [toggling, setToggling] = useState<string | null>(null);
-  const { archetypes, byName } = useArchetypes();
   const toast = useToast();
 
   const isSection = section !== "all" && section !== "drafts";
@@ -51,36 +46,11 @@ export function ContentList({ section, entries, settings, loading, repoUrl, bran
     [entries, section]
   );
 
-  // Kinds (archetypes) present here. The filter only appears when there's more than one to choose from.
-  const kinds = useMemo(() => {
-    const names = new Set(scoped.map((e) => e.archetype).filter((a): a is string => !!a));
-    return archetypes.filter((a) => names.has(a.name));
-  }, [scoped, archetypes]);
-  const showKinds = kinds.length >= 2;
-
-  // "New post" uses the archetype `hugo new` would; the menu offers the kinds whose posts live here
-  // (or all of them on the overview), plus quick capture.
-  const baseArchetype = sectionArchetype(archetypes, newTarget);
-  const newPostHref = `/editor?new=${encodeURIComponent(newTarget)}${baseArchetype ? `&archetype=${encodeURIComponent(baseArchetype.name)}` : ""}`;
-  const creatable = kindArchetypes(archetypes).filter((a) => section === "all" || archetypeSection(a.name, entries, settings.postsSection) === section);
-  const menuItems: NewMenuItem[] = [
-    ...(creatable.length
-      ? [{ href: `/quick?archetype=${encodeURIComponent(creatable[0].name)}`, label: "Quick capture", hint: "Title, body and tags, then publish", icon: "bolt" }]
-      : []),
-    ...creatable.map((a) => ({
-      href: `/editor?new=${encodeURIComponent(archetypeSection(a.name, entries, isSection ? section : settings.postsSection))}&archetype=${encodeURIComponent(a.name)}`,
-      label: `New ${a.label}`,
-      hint: `From archetypes/${a.path.split("/").slice(1).join("/")}`,
-      icon: "add",
-    })),
-  ];
-
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
     const list = scoped.filter((e) => {
       if (filter === "drafts" && !e.draft) return false;
       if (filter === "published" && e.draft) return false;
-      if (showKinds && kind !== "all" && e.archetype !== kind) return false;
       if (!q) return true;
       return e.title.toLowerCase().includes(q) || e.path.toLowerCase().includes(q) || e.tags.some((t) => t.toLowerCase().includes(q));
     });
@@ -94,11 +64,10 @@ export function ContentList({ section, entries, settings, loading, repoUrl, bran
       const diff = sort === "newest" ? time(b) - time(a) : time(a) - time(b);
       return diff || (a.title || a.path).localeCompare(b.title || b.path);
     });
-  }, [scoped, query, filter, sort, isSection, section, showKinds, kind]);
+  }, [scoped, query, filter, sort, isSection, section]);
 
   const flipDraft = async (entry: ContentEntry) => {
     setToggling(entry.path);
-    const label = byName(entry.archetype)?.label;
     const title = entry.title || fileLabel(entry.path);
     try {
       await toggleDraft({
@@ -106,11 +75,7 @@ export function ContentList({ section, entries, settings, loading, repoUrl, bran
         branch,
         path: entry.path,
         message: (draft) =>
-          label
-            ? archetypeCommitMessage(draft ? "unpublish" : "publish", sectionName(entry.section, settings.contentDir), label, title)
-            : draft
-              ? `Mark "${title}" as draft`
-              : `Publish "${title}"`,
+          draft ? `Mark "${title}" as draft` : `Publish "${title}"`,
       });
       await onChanged();
       toast(entry.draft ? `Published "${title}"` : `"${title}" is now a draft`);
@@ -139,7 +104,9 @@ export function ContentList({ section, entries, settings, loading, repoUrl, bran
         </div>
         {section !== "drafts" && (
           <div className="self-start sm:self-auto">
-            <NewMenu href={newPostHref} label={isPosts || section === "all" ? "New post" : `New in ${sectionLabel(section, settings.contentDir)}`} items={menuItems} />
+            <Link href={`/editor?new=${encodeURIComponent(newTarget)}`} className="btn-primary">
+              <Icon name="add" className="!text-[19px]" /> {isPosts || section === "all" ? "New post" : `New in ${sectionLabel(section, settings.contentDir)}`}
+            </Link>
           </div>
         )}
       </header>
@@ -158,25 +125,6 @@ export function ContentList({ section, entries, settings, loading, repoUrl, bran
           />
         </label>
         <div className="flex flex-wrap gap-2">
-          {showKinds && (
-            <div className="flex rounded-md border border-outline-variant bg-surface-container-lowest p-0.5 h-10" role="group" aria-label="Kind">
-              {[{ name: "all", label: "All kinds" }, ...kinds].map((k) => (
-                <button
-                  key={k.name}
-                  onClick={() => {
-                    setKind(k.name);
-                    setVisible(PAGE_SIZE);
-                  }}
-                  aria-pressed={kind === k.name}
-                  className={`px-3 rounded text-sm transition-colors ${
-                    kind === k.name ? "bg-surface-container-high text-on-surface font-medium" : "text-on-surface-variant hover:text-on-surface"
-                  }`}
-                >
-                  {k.label}
-                </button>
-              ))}
-            </div>
-          )}
           {draftCount > 0 && section !== "drafts" && (
             <div className="flex rounded-md border border-outline-variant bg-surface-container-lowest p-0.5 h-10">
               {(["all", "published", "drafts"] as Filter[]).map((f) => (
@@ -229,7 +177,6 @@ export function ContentList({ section, entries, settings, loading, repoUrl, bran
                     {entry.title || <span className="italic text-on-surface-variant">{fileLabel(entry.path)}</span>}
                   </Link>
                   {entry.draft && <Badge tone="draft">Draft</Badge>}
-                  {entry.archetype && <Badge tone="primary">{byName(entry.archetype)?.label ?? entry.archetype}</Badge>}
                   {entry.isIndex && <Badge>Section page</Badge>}
                 </div>
                 <div className="mt-1 flex items-center gap-x-2 gap-y-1 flex-wrap text-xs text-on-surface-variant">
