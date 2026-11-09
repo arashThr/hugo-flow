@@ -19,7 +19,8 @@ import { ImageInsertModal, type ImageTarget } from "@/components/editor/ImageIns
 import { buildExtensions, imageRowHtml, type ImageResolver } from "@/lib/editor/extensions";
 import { protectShortcodes, restoreShortcodes } from "@/lib/editor/shortcodes";
 import { rebaseOntoOriginal } from "@/lib/editor/rebase";
-import { altFromFile, prepareImage, type PendingUpload } from "@/lib/editor/images";
+import { altFromFile, fileFromDataUrl, prepareImage, type PendingUpload } from "@/lib/editor/images";
+import { useWritingAssist } from "@/components/editor/WritingAssist";
 import {
   asString,
   parseContent,
@@ -124,7 +125,7 @@ function createResolver(ctxRef: RefObject<ResolverContext>, uploadsRef: RefObjec
 
 function EditorScreen() {
   const { status } = useSession();
-  const { settings, isLoaded } = useSettings();
+  const { settings, updateSettings, isLoaded, imageTemplate } = useSettings();
   const { site, refresh } = useSite();
   const toast = useToast();
   const router = useRouter();
@@ -683,6 +684,56 @@ function EditorScreen() {
   const isDraft = fm.draft === true;
   const saveLabel = isNew ? (isDraft ? "Save draft" : "Publish") : "Save";
 
+  const assist = useWritingAssist({
+    provider: settings.aiProvider,
+    grokApiKey: settings.grokApiKey,
+    openaiApiKey: settings.openaiApiKey,
+    ready: loadState === "ready",
+    title: asString(fm.title),
+    summary: asString(fm[descriptionKey]),
+    getBody,
+    captureSelection: () => {
+      if (viewMode === "markdown") {
+        const el = textareaRef.current;
+        if (!el || el.selectionStart === el.selectionEnd) return null;
+        return { text: markdown.slice(el.selectionStart, el.selectionEnd), from: el.selectionStart, to: el.selectionEnd, mode: "markdown" as const };
+      }
+      if (!editor || editor.state.selection.empty) return null;
+      const { from, to } = editor.state.selection;
+      const text = editor.state.doc.textBetween(from, to, "\n");
+      if (!text.trim()) return null;
+      return { text, from, to, mode: "rich" as const };
+    },
+    applyBody: (md) => {
+      if (viewMode === "markdown") setMarkdown(md);
+      else editor?.chain().focus().setContent(protectShortcodes(md)).run();
+    },
+    applySelection: (span, md) => {
+      if (span.mode === "markdown") {
+        setMarkdown((current) => current.slice(0, span.from) + md + current.slice(span.to));
+        return;
+      }
+      editor?.chain().focus().insertContentAt({ from: span.from, to: span.to }, protectShortcodes(md)).run();
+    },
+    applySummary: (text) => setField(descriptionKey, text),
+    applyTags: (tags) => setField("tags", tags),
+    applyImage: async (dataUrl) => {
+      const prepared = await prepareImage(fileFromDataUrl(dataUrl, "featured.jpg"), 1920, settings.imagePath);
+      const previous = asString(fm[imageKey]);
+      setPendingUploads([...uploadsRef.current.filter((upload) => upload.sitePath !== previous), prepared]);
+      setField(imageKey, prepared.sitePath);
+      setSidebarOpen(true);
+    },
+    updateSettings,
+    imageTheme: settings.imageTheme,
+    imageTemplate,
+    textModel: settings.aiProvider === "openai" ? settings.openaiTextModel : settings.grokTextModel,
+    imageModel: settings.aiProvider === "openai" ? settings.openaiImageModel : settings.grokImageModel,
+    onBackgroundStart: () => {
+      if (window.matchMedia(DESKTOP).matches) setSidebarOpen(true);
+    },
+  });
+
   if (loadState === "error") {
     return (
       <div className="min-h-screen flex items-center justify-center p-6">
@@ -716,6 +767,12 @@ function EditorScreen() {
             <span className="truncate font-medium text-on-surface">{asString(fm.title) || (isNew ? "New page" : effectiveFileName)}</span>
           </div>
           {isDraft && <Badge tone="draft">Draft</Badge>}
+          {(assist.summaryBusy || assist.imageBusy) && (
+            <span className="inline-flex items-center gap-1.5 text-xs text-on-surface-variant shrink-0">
+              <Spinner className="w-3 h-3" />
+              {assist.summaryBusy && assist.imageBusy ? "Writing summary, tags, and image" : assist.imageBusy ? "Generating image" : "Writing summary and tags"}
+            </span>
+          )}
           <span className="hidden md:inline-flex items-center gap-1.5 text-xs text-on-surface-variant shrink-0">
             {loadState === "loading" ? (
               <>
@@ -810,6 +867,17 @@ function EditorScreen() {
               onImage={() => openPicker("cursor")}
               onImageRow={() => openPicker("row")}
               onLink={openLinkPrompt}
+              assistant={{
+                providerLabel: assist.providerLabel,
+                busy: assist.busy,
+                summaryBusy: assist.summaryBusy,
+                imageBusy: assist.imageBusy,
+                disabled: loadState !== "ready" || !isLoaded,
+                onProofread: assist.proofread,
+                onSuggest: assist.suggest,
+                onSummary: assist.summary,
+                onImage: assist.image,
+              }}
             />
 
             <div className="mt-6 relative">
@@ -906,6 +974,11 @@ function EditorScreen() {
           featuredSrc={featured ? displaySrc(featured, { repository: settings.repository, branch, dir: folder }, uploads) : null}
           onFeaturedPick={() => openPicker("featured")}
           onFeaturedRemove={() => setField(imageKey, undefined)}
+          onWriteSummary={assist.summary}
+          onFeaturedGenerate={assist.image}
+          assistDisabled={loadState !== "ready" || !isLoaded}
+          summaryBusy={assist.summaryBusy}
+          imageBusy={assist.imageBusy}
           folder={folder}
           folders={folders}
           onFolder={(f) => {
@@ -922,6 +995,8 @@ function EditorScreen() {
           githubUrl={original ? `https://github.com/${settings.repository}/blob/${branch}/${original.path}` : undefined}
         />
       </div>
+
+      {assist.dialogs}
 
       <input type="file" accept="image/*" ref={fileInputRef} className="hidden" onChange={onFilesChosen} />
 

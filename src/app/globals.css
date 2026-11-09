@@ -105,6 +105,19 @@
   .card {
     @apply rounded-xl border border-outline-variant bg-surface-container-lowest;
   }
+  /* The track is 1rem (rounded-lg here). The inset is p-0.5, so the selected fill uses the inner radius and is clipped to the track. */
+  .segmented {
+    @apply flex items-center overflow-hidden rounded-lg bg-surface-container p-0.5;
+  }
+  .segment {
+    @apply rounded-[calc(1rem_-_0.125rem)] font-medium transition-colors;
+  }
+  .segment-on {
+    @apply bg-surface-container-lowest text-on-surface shadow-sm;
+  }
+  .segment-off {
+    @apply text-on-surface-variant hover:text-on-surface;
+  }
 }
 
 @layer utilities {

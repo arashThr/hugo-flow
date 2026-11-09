@@ -30,7 +30,7 @@ export default function Home() {
 
 function Dashboard() {
   const { data: session, status } = useSession();
-  const { settings, updateSettings, isLoaded } = useSettings();
+  const { settings, updateSettings, isLoaded, imageTemplate, saveImageTemplate } = useSettings();
   const { site, loading, error, refresh } = useSite();
   const searchParams = useSearchParams();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -51,7 +51,14 @@ function Dashboard() {
           <p className="text-on-surface-variant mt-1">Choose the repository you want to write in.</p>
         </div>
         <div className="w-full max-w-lg">
-          <SettingsView settings={settings} updateSettings={updateSettings} sections={sections} isInitialSetup />
+          <SettingsView
+            settings={settings}
+            updateSettings={updateSettings}
+            sections={sections}
+            isInitialSetup
+            imageTemplate={imageTemplate}
+            saveImageTemplate={saveImageTemplate}
+          />
         </div>
       </div>
     );
@@ -97,7 +104,13 @@ function Dashboard() {
         )}
 
         {view.kind === "settings" ? (
-          <SettingsView settings={settings} updateSettings={updateSettings} sections={sections} />
+          <SettingsView
+            settings={settings}
+            updateSettings={updateSettings}
+            sections={sections}
+            imageTemplate={imageTemplate}
+            saveImageTemplate={saveImageTemplate}
+          />
         ) : view.kind === "media" ? (
           <MediaLibrary media={site?.media ?? []} settings={settings} branch={site?.branch ?? settings.branch} loading={loading} onChanged={refresh} />
         ) : (

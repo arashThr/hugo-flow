@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { useEditorState, type Editor } from "@tiptap/react";
 import { Icon } from "@/components/ui";
 
@@ -12,6 +13,17 @@ interface Props {
   onImage: () => void;
   onImageRow: () => void;
   onLink: () => void;
+  assistant?: {
+    providerLabel: string;
+    busy: boolean;
+    summaryBusy: boolean;
+    imageBusy: boolean;
+    disabled: boolean;
+    onProofread: () => void;
+    onSuggest: () => void;
+    onSummary: () => void;
+    onImage: () => void;
+  };
 }
 
 /** Toggle a checkbox on the list item(s) in the selection, turning the block into a list if needed. */
@@ -77,7 +89,7 @@ function Btn({ icon, label, onClick, active, disabled, text }: { icon?: string; 
 
 const Sep = () => <div className="w-px h-5 bg-outline-variant mx-1 shrink-0" />;
 
-export function EditorToolbar({ editor, viewMode, onViewMode, onImage, onImageRow, onLink }: Props) {
+export function EditorToolbar({ editor, viewMode, onViewMode, onImage, onImageRow, onLink, assistant }: Props) {
   const state = useEditorState({
     editor,
     selector: ({ editor: e }) =>
@@ -138,15 +150,15 @@ export function EditorToolbar({ editor, viewMode, onViewMode, onImage, onImageRo
           <Btn icon="view_column" label="Insert a row of images" onClick={onImageRow} />
         </div>
 
-        <div className="flex items-center rounded-lg bg-surface-container p-0.5 shrink-0 ml-1">
+        {assistant && <AssistantMenu assistant={assistant} />}
+
+        <div className="segmented shrink-0 ml-1">
           {(["rich", "markdown"] as ViewMode[]).map((mode) => (
             <button
               key={mode}
               type="button"
               onClick={() => onViewMode(mode)}
-              className={`h-7 px-2.5 rounded-md text-xs font-medium transition-colors flex items-center gap-1 ${
-                viewMode === mode ? "bg-surface-container-lowest text-on-surface shadow-sm" : "text-on-surface-variant hover:text-on-surface"
-              }`}
+              className={`segment h-7 px-2.5 text-xs flex items-center gap-1 ${viewMode === mode ? "segment-on" : "segment-off"}`}
               title={mode === "rich" ? "Visual editor" : "Edit raw markdown"}
             >
               <Icon name={mode === "rich" ? "edit" : "code"} className="!text-[15px]" />
@@ -156,5 +168,82 @@ export function EditorToolbar({ editor, viewMode, onViewMode, onImage, onImageRo
         </div>
       </div>
     </div>
+  );
+}
+
+function AssistantMenu({ assistant }: { assistant: NonNullable<Props["assistant"]> }) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointer = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("pointerdown", onPointer);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("pointerdown", onPointer);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const run = (action: () => void) => {
+    setOpen(false);
+    action();
+  };
+
+  return (
+    <div className="relative shrink-0 ml-1" ref={rootRef}>
+      <Btn
+        icon="auto_awesome"
+        label="Writing assistant"
+        active={open}
+        disabled={assistant.disabled || assistant.busy}
+        onClick={() => setOpen((value) => !value)}
+      />
+      {open && (
+        <div className="absolute right-0 top-full z-30 mt-1 w-60 rounded-lg border border-outline-variant bg-surface-container-lowest p-1 shadow-lg">
+          <MenuItem icon="spellcheck" label="Proofread" hint="Fix grammar and clarity" disabled={assistant.busy} onClick={() => run(assistant.onProofread)} />
+          <MenuItem icon="edit_note" label="Suggest text" hint="Rewrite the selection, or continue" disabled={assistant.busy} onClick={() => run(assistant.onSuggest)} />
+          <MenuItem
+            icon="notes"
+            label={assistant.summaryBusy ? "Writing summary and tags…" : "Summary and tags"}
+            hint={assistant.summaryBusy ? "You can keep writing" : "Fill the description and tags"}
+            disabled={assistant.summaryBusy}
+            onClick={() => run(assistant.onSummary)}
+          />
+          <MenuItem
+            icon="add_photo_alternate"
+            label={assistant.imageBusy ? "Generating image…" : "Featured image"}
+            hint={assistant.imageBusy ? "You can keep writing" : "Generate one from the summary"}
+            disabled={assistant.imageBusy}
+            onClick={() => run(assistant.onImage)}
+          />
+          <p className="px-2 py-1.5 text-[11px] text-on-surface-variant">Using {assistant.providerLabel}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MenuItem({ icon, label, hint, onClick, disabled = false }: { icon: string; label: string; hint: string; onClick: () => void; disabled?: boolean }) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      className="flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left hover:bg-surface-container disabled:opacity-50 disabled:pointer-events-none"
+      onMouseDown={(event) => event.preventDefault()}
+      onClick={onClick}
+    >
+      <Icon name={icon} className="mt-0.5 !text-[18px] text-on-surface-variant" />
+      <span className="min-w-0">
+        <span className="block text-sm text-on-surface">{label}</span>
+        <span className="block text-[11px] text-on-surface-variant">{hint}</span>
+      </span>
+    </button>
   );
 }

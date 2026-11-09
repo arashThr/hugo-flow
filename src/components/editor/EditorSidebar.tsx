@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { Icon } from "@/components/ui";
+import { Icon, Modal, Spinner } from "@/components/ui";
 import { asString, asStringArray, type FrontMatter, type FrontMatterFormat } from "@/lib/frontmatter";
 import { fromLocalInput, toLocalInput } from "@/lib/content";
 
@@ -20,6 +20,11 @@ interface Props {
   featuredSrc: string | null;
   onFeaturedPick: () => void;
   onFeaturedRemove: () => void;
+  onWriteSummary?: () => void;
+  onFeaturedGenerate?: () => void;
+  assistDisabled?: boolean;
+  summaryBusy?: boolean;
+  imageBusy?: boolean;
   folder: string;
   folders: string[];
   onFolder: (folder: string) => void;
@@ -51,6 +56,7 @@ export function EditorSidebar(props: Props) {
   const date = asString(fm.date);
   const tags = asStringArray(fm.tags);
   const [showOther, setShowOther] = useState(!!props.otherError);
+  const [featuredOpen, setFeaturedOpen] = useState(false);
   const formatLabel = props.format === "none" ? "TOML" : props.format.toUpperCase();
 
   return (
@@ -112,11 +118,32 @@ export function EditorSidebar(props: Props) {
               )}
 
               <div>
-                <span className="field-label">Tags</span>
+                <span className="flex items-center justify-between gap-2 mb-1.5">
+                  <span className="field-label mb-0">Tags</span>
+                  {props.onWriteSummary && (
+                    <button
+                      type="button"
+                      className="group inline-flex items-center gap-1 text-xs text-primary disabled:opacity-40"
+                      disabled={props.assistDisabled || props.summaryBusy}
+                      onClick={props.onWriteSummary}
+                    >
+                      {props.summaryBusy ? (
+                        <>
+                          <Spinner className="w-3 h-3" /> Writing…
+                        </>
+                      ) : (
+                        <>
+                          <Icon name="auto_awesome" className="!text-[14px]" />
+                          <span className="underline-offset-2 group-hover:underline">Summary and tags</span>
+                        </>
+                      )}
+                    </button>
+                  )}
+                </span>
                 <TagInput tags={tags} suggestions={props.tagSuggestions} onChange={(t) => setField("tags", t)} />
               </div>
 
-              <label className="block">
+              <div>
                 <span className="field-label capitalize">{props.descriptionKey}</span>
                 <textarea
                   className="field resize-y min-h-[72px]"
@@ -125,7 +152,7 @@ export function EditorSidebar(props: Props) {
                   value={asString(fm[props.descriptionKey])}
                   onChange={(e) => setField(props.descriptionKey, e.target.value)}
                 />
-              </label>
+              </div>
             </div>
           </Section>
 
@@ -134,27 +161,56 @@ export function EditorSidebar(props: Props) {
               title="Featured image"
               action={
                 props.featuredSrc && (
-                  <button type="button" className="text-xs text-on-surface-variant hover:text-error" onClick={props.onFeaturedRemove}>
-                    Remove
-                  </button>
+                  <span className="flex items-center gap-3">
+                    <button type="button" className="text-xs text-primary hover:underline disabled:opacity-40" disabled={props.imageBusy} onClick={props.onFeaturedPick}>
+                      Replace
+                    </button>
+                    <button type="button" className="text-xs text-on-surface-variant hover:text-error disabled:opacity-40" disabled={props.imageBusy} onClick={props.onFeaturedRemove}>
+                      Remove
+                    </button>
+                  </span>
                 )
               }
             >
-              <button
-                type="button"
-                onClick={props.onFeaturedPick}
-                className="group w-full overflow-hidden rounded-lg border-2 border-dashed border-outline-variant hover:border-primary/60 bg-surface-container-lowest transition-colors"
-              >
-                {props.featuredSrc ? (
-                  // eslint-disable-next-line @next/next/no-img-element
+              {props.featuredSrc ? (
+                <button
+                  type="button"
+                  onClick={() => setFeaturedOpen(true)}
+                  disabled={props.imageBusy}
+                  title="View featured image"
+                  className="group relative block w-full cursor-zoom-in overflow-hidden rounded-lg border border-outline-variant bg-surface-container-lowest disabled:cursor-default disabled:opacity-100"
+                >
+                  {props.imageBusy && (
+                    <span className="absolute inset-0 z-10 flex items-center justify-center gap-2 bg-background/75 text-sm text-on-surface">
+                      <Spinner /> Generating…
+                    </span>
+                  )}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={props.featuredSrc} alt="Featured" className="w-full aspect-video object-cover" />
-                ) : (
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={props.onFeaturedPick}
+                  disabled={props.imageBusy}
+                  className="group relative w-full overflow-hidden rounded-lg border-2 border-dashed border-outline-variant hover:border-primary/60 bg-surface-container-lowest transition-colors disabled:opacity-100"
+                >
+                  {props.imageBusy && (
+                    <span className="absolute inset-0 z-10 flex items-center justify-center gap-2 bg-background/75 text-sm text-on-surface">
+                      <Spinner /> Generating…
+                    </span>
+                  )}
                   <span className="flex flex-col items-center gap-1.5 py-6 text-on-surface-variant group-hover:text-primary">
                     <Icon name="add_photo_alternate" className="!text-[26px]" />
                     <span className="text-xs">Choose image</span>
                   </span>
-                )}
-              </button>
+                </button>
+              )}
+              {props.onFeaturedGenerate && (
+                <button type="button" className="btn-secondary w-full mt-2" disabled={props.assistDisabled || props.imageBusy} onClick={props.onFeaturedGenerate}>
+                  <Icon name="auto_awesome" className="!text-[18px]" /> Generate with AI
+                </button>
+              )}
             </Section>
           )}
 
@@ -235,6 +291,12 @@ export function EditorSidebar(props: Props) {
           )}
         </div>
       </aside>
+      {props.featuredSrc && (
+        <Modal open={featuredOpen} onClose={() => setFeaturedOpen(false)} title="Featured image" size="lg">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={props.featuredSrc} alt="Featured" className="max-h-[70vh] w-full rounded-lg bg-surface-container object-contain" />
+        </Modal>
+      )}
     </>
   );
 }
