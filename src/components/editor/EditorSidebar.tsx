@@ -3,6 +3,7 @@
 import { useState, type ReactNode } from "react";
 import { TagInput } from "@/components/TagInput";
 import { Icon, Modal, Spinner } from "@/components/ui";
+import type { TextDirection } from "@/lib/editor/direction";
 import { asString, asStringArray, type FrontMatter, type FrontMatterFormat } from "@/lib/frontmatter";
 import { fromLocalInput, toLocalInput } from "@/lib/content";
 
@@ -15,6 +16,7 @@ interface Props {
   setField: (key: string, value: unknown) => void;
   descriptionKey: string;
   imageKey: string;
+  direction: TextDirection;
   showDate: boolean;
   showImage: boolean;
   tagSuggestions: string[];
@@ -149,6 +151,7 @@ export function EditorSidebar(props: Props) {
                 <textarea
                   className="field resize-y min-h-[72px]"
                   rows={3}
+                  dir={props.direction}
                   placeholder="Shown in previews and search results"
                   value={asString(fm[props.descriptionKey])}
                   onChange={(e) => setField(props.descriptionKey, e.target.value)}

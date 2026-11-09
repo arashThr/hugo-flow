@@ -1,6 +1,7 @@
 "use client";
 
-import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { subscribeImageJobEvents } from "@/lib/editor/image-job";
 import { Icon } from "./ui";
 
 /* ---------- Toasts ---------- */
@@ -22,6 +23,20 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     setToasts((t) => [...t, { id, message, tone }]);
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), tone === "error" ? 8000 : 4500);
   }, []);
+
+  useEffect(() => {
+    return subscribeImageJobEvents((event) => {
+      if (event.type === "error") {
+        show(event.message, "error");
+        return;
+      }
+      show(
+        event.onPage
+          ? "Featured image added. It uploads to GitHub when you save."
+          : `Featured image added to “${event.label}”. Open that page and choose Restore to see it.`
+      );
+    });
+  }, [show]);
 
   return (
     <ToastContext.Provider value={show}>

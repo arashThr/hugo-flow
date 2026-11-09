@@ -1,6 +1,7 @@
 import { Octokit } from "@octokit/rest";
 import { parseContent, asString, asStringArray } from "./frontmatter";
 import { IMAGE_EXT, contentBaseName, sectionOf, type ContentEntry, type MediaEntry, type SiteInfo } from "./content";
+import { siteDirection } from "./editor/direction";
 
 export function getOctokit(accessToken: string) {
   return new Octokit({ auth: accessToken });
@@ -151,6 +152,7 @@ export async function getSiteInfo(
     branch,
     baseURL,
     allowsRawHtml: /unsafe\s*[=:]\s*["']?true/i.test(configText),
+    direction: siteDirection(configText),
     configPath: configs[0]?.path ?? null,
     entries,
     media,

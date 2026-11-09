@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, Manrope, Literata } from "next/font/google";
+import { Inter, Literata, Manrope, Vazirmatn } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/components/AuthProvider";
 import { SettingsProvider } from "@/components/SettingsProvider";
@@ -9,6 +9,8 @@ import { ToastProvider } from "@/components/Toast";
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 const manrope = Manrope({ subsets: ["latin"], variable: "--font-manrope" });
 const literata = Literata({ subsets: ["latin"], variable: "--font-literata" });
+// Not preloaded: English pages never request it. A Persian glyph, or an RTL page, does.
+const vazirmatn = Vazirmatn({ subsets: ["arabic", "latin"], variable: "--font-vazirmatn", preload: false, display: "swap" });
 
 export const metadata: Metadata = {
   title: "HugoFlow - The Modern Git-based Front-end interface for Hugo",
@@ -35,7 +37,7 @@ export default function RootLayout({
         <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=block" rel="stylesheet" />
         <script defer src="https://cloud.umami.is/script.js" data-website-id="c3c191eb-fea1-4a59-88cc-2bdfb8f28131"></script>
       </head>
-      <body className={`${inter.variable} ${manrope.variable} ${literata.variable} font-sans text-[15px] antialiased min-h-screen flex flex-col`}>
+      <body className={`${inter.variable} ${manrope.variable} ${literata.variable} ${vazirmatn.variable} font-sans text-[15px] antialiased min-h-screen flex flex-col`}>
         <AuthProvider>
           <SettingsProvider>
             <SiteProvider>

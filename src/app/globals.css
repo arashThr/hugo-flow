@@ -164,7 +164,7 @@
 .ProseMirror > * + * { margin-top: 0; }
 .ProseMirror p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);
-  float: left;
+  float: inline-start;
   height: 0;
   pointer-events: none;
   color: rgb(var(--c-on-surface-variant) / 0.5);
@@ -182,6 +182,8 @@
   outline-offset: 2px;
 }
 .ProseMirror .image-row {
+  /* The saved HTML has no dir, so the row stays left to right in the editor too. */
+  direction: ltr;
   display: flex;
   gap: 0.5rem;
   align-items: flex-start;
@@ -215,7 +217,37 @@
   display: flex;
   gap: 0.5em;
   align-items: flex-start;
-  margin-left: -1.4em;
+  margin-inline-start: -1.4em;
+}
+/* Vazirmatn for Persian prose. Tight tracking pulls joined letters apart, and the Latin faces have no Persian. */
+textarea[dir="rtl"]:not(.font-mono),
+input[dir="rtl"],
+.editor-writing[dir="rtl"] .ProseMirror,
+.editor-writing[dir="rtl"] .ProseMirror h1,
+.editor-writing[dir="rtl"] .ProseMirror h2,
+.editor-writing[dir="rtl"] .ProseMirror h3,
+.editor-writing[dir="rtl"] .ProseMirror h4 {
+  font-family: var(--font-vazirmatn), var(--font-inter), sans-serif;
+  letter-spacing: 0;
+  line-height: 1.7;
+}
+/* Code stays left to right, in a monospace face, inside an RTL page. Quotes use guillemets. */
+.editor-writing[dir="rtl"] .ProseMirror pre,
+.editor-writing[dir="rtl"] .ProseMirror pre code {
+  direction: ltr;
+  text-align: left;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0;
+  line-height: 1.6;
+}
+.editor-writing[dir="rtl"] .ProseMirror :not(pre) > code {
+  direction: ltr;
+  unicode-bidi: isolate;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0;
+}
+.editor-writing[dir="rtl"] .ProseMirror blockquote {
+  quotes: "«" "»" "‹" "›";
 }
 .ProseMirror li[data-checked] > .li-content { flex: 1; min-width: 0; }
 .ProseMirror li[data-checked] > .li-content > p { margin: 0; }

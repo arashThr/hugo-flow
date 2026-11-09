@@ -17,10 +17,19 @@ import { EditorToolbar, type ViewMode } from "@/components/editor/EditorToolbar"
 import { EditorSidebar } from "@/components/editor/EditorSidebar";
 import { ImageInsertModal, type ImageTarget } from "@/components/editor/ImageInsertModal";
 import { buildExtensions, imageRowHtml, type ImageResolver } from "@/lib/editor/extensions";
+import {
+  pageDirection,
+  readDirectionOverride,
+  retargetDirectionOverride,
+  writeDirectionOverride,
+  type TextDirection,
+} from "@/lib/editor/direction";
 import { protectShortcodes, restoreShortcodes } from "@/lib/editor/shortcodes";
 import { rebaseOntoOriginal } from "@/lib/editor/rebase";
-import { altFromFile, fileFromDataUrl, prepareImage, type PendingUpload } from "@/lib/editor/images";
+import { altFromFile, prepareImage, type PendingUpload } from "@/lib/editor/images";
+import { bindImageTarget, retargetImageJob } from "@/lib/editor/image-job";
 import { useWritingAssist } from "@/components/editor/WritingAssist";
+import { mergeTags } from "@/lib/tags";
 import {
   asString,
   deepEqual,
@@ -121,6 +130,8 @@ function EditorScreen() {
   const [otherError, setOtherError] = useState<string | null>(null);
   const [markdown, setMarkdown] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("rich");
+  const [direction, setDirection] = useState<TextDirection>("ltr");
+  const directionPin = useRef<TextDirection | null>(null);
   const [uploads, setUploads] = useState<PendingUpload[]>([]);
   const [contentVersion, setContentVersion] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -141,8 +152,20 @@ function EditorScreen() {
   const uploadsRef = useRef<PendingUpload[]>([]);
   const ctxRef = useRef<ResolverContext>({ repository: "", branch: "", dir: "" });
   const loadedKeyRef = useRef<string | null>(null);
+  const navGeneration = useRef(0);
+  const navigatingRef = useRef(false);
+  const fmRef = useRef(fm);
+  const imageKeyRef = useRef(imageKey);
+  const draftOfferRef = useRef(draftOffer);
+  const draftFieldsRef = useRef<{ key: string; ready: boolean; offer: boolean; draft: StoredDraft | null }>({
+    key: "",
+    ready: false,
+    offer: false,
+    draft: null,
+  });
 
   const branch = site?.branch ?? settings.branch;
+  const directionFallback: TextDirection = site?.direction === "rtl" ? "rtl" : "ltr";
   useEffect(() => {
     ctxRef.current.repository = settings.repository;
     ctxRef.current.branch = branch;
@@ -192,6 +215,24 @@ function EditorScreen() {
     onUpdate: () => setContentVersion((v) => v + 1),
   });
 
+  useEffect(() => {
+    if (!editor || editor.isDestroyed) return;
+    // The attribute has to sit on the editable itself. A parent dir is not enough for the caret.
+    const apply = () => {
+      try {
+        const dom = editor.view.dom;
+        if (dom.getAttribute("dir") !== direction) dom.setAttribute("dir", direction);
+      } catch {
+        // The view is not mounted yet. The mount event below retries.
+      }
+    };
+    apply();
+    editor.on("mount", apply);
+    return () => {
+      editor.off("mount", apply);
+    };
+  }, [editor, direction]);
+
   const managedKeys = useMemo(() => new Set([...BASE_MANAGED, descriptionKey, imageKey]), [descriptionKey, imageKey]);
   const isNew = !original;
   const isBundle = !!fileName && /^_?index$/.test(fileName) && !isNew;
@@ -238,7 +279,11 @@ function EditorScreen() {
   useEffect(() => {
     if (!editor || !isLoaded || !settings.repository) return;
     if (loadedKeyRef.current === loadKey) return;
+    navigatingRef.current = true;
+    const leaving = draftFieldsRef.current;
+    if (leaving.ready && !leaving.offer && leaving.key && leaving.draft) writeDraft(leaving.key, leaving.draft);
     loadedKeyRef.current = loadKey;
+    const navId = ++navGeneration.current;
     let cancelled = false;
     let completed = false;
 
@@ -263,6 +308,9 @@ function EditorScreen() {
           setFileName((editPath.split("/").pop() || "").replace(/\.(md|markdown)$/, ""));
           setMarkdown(parsed.body);
           setEditorMarkdown(parsed.body);
+          const override = readDirectionOverride(settings.repository, editPath);
+          directionPin.current = override;
+          setDirection(pageDirection(`${asString(parsed.data.title)}\n${parsed.body}`, site?.direction === "rtl" ? "rtl" : "ltr", override));
           const normalizedBody = editor
             ? restoreShortcodes((editor.storage as unknown as { markdown: { getMarkdown(): string } }).markdown.getMarkdown())
             : parsed.body;
@@ -286,6 +334,9 @@ function EditorScreen() {
           setOriginalKeys([]);
           setMarkdown("");
           setEditorMarkdown("");
+          const override = readDirectionOverride(settings.repository, null);
+          directionPin.current = override;
+          setDirection(pageDirection("", site?.direction === "rtl" ? "rtl" : "ltr", override));
           setFolder(section);
           setFileName(null);
           setOriginal(null);
@@ -293,11 +344,13 @@ function EditorScreen() {
           if (draft) setDraftOffer(draft);
         }
         completed = true;
+        if (navGeneration.current === navId) navigatingRef.current = false;
         setLoadState("ready");
         setContentVersion((v) => v + 1);
       } catch (e) {
         if (cancelled) return;
         completed = true;
+        if (navGeneration.current === navId) navigatingRef.current = false;
         setLoadError((e as Error).message);
         setLoadState("error");
       }
@@ -322,24 +375,88 @@ function EditorScreen() {
     [loadState, getBody, contentVersion]
   );
   const bodyChanged = original ? currentBody !== original.body && currentBody !== original.normalizedBody : currentBody.trim() !== "";
+
+  // Follow the writing until the writer pins a direction from the toolbar.
+  useEffect(() => {
+    if (loadState !== "ready" || directionPin.current) return;
+    setDirection(pageDirection(`${asString(fm.title)}\n${currentBody}`, directionFallback, null));
+  }, [loadState, fm.title, currentBody, directionFallback]);
   const fmChanged = original ? !deepEqual(fm, original.fm) : asString(fm.title).trim() !== "";
   const dirty = loadState === "ready" && (bodyChanged || fmChanged || (!!original && path !== original.path));
   const hasImageRows = currentBody.includes('class="image-row"');
 
+  const pageDraftKey = draftKey(settings.repository, original?.path ?? null);
+
+  // Mirror the page into refs so a featured image can be stored after this screen unmounts.
+  useEffect(() => {
+    fmRef.current = fm;
+    imageKeyRef.current = imageKey;
+    draftOfferRef.current = draftOffer;
+    const draft =
+      loadState === "ready" && !draftOffer && dirty
+        ? { savedAt: Date.now(), baseSha: original?.sha ?? null, format, fm, folder, fileName, body: currentBody, uploads: uploadsRef.current }
+        : null;
+    draftFieldsRef.current = { key: pageDraftKey, ready: loadState === "ready", offer: !!draftOffer, draft };
+  }, [currentBody, dirty, draftOffer, fileName, fm, folder, format, imageKey, loadState, original?.sha, pageDraftKey, uploads]);
+
   // Keep a local copy so a closed tab or crash never loses work.
+  // The timer reads the ref, so a featured image that lands just before this fires is included.
   useEffect(() => {
     if (loadState !== "ready" || draftOffer) return;
-    const key = draftKey(settings.repository, original?.path ?? null);
+    const key = pageDraftKey;
     const timer = setTimeout(() => {
-      writeDraft(
-        key,
-        dirty
-          ? { savedAt: Date.now(), baseSha: original?.sha ?? null, format, fm, folder, fileName, body: currentBody, uploads: uploadsRef.current }
-          : null
-      );
+      const current = draftFieldsRef.current;
+      if (!current.ready || current.offer || current.key !== key) return;
+      writeDraft(key, current.draft);
     }, 800);
     return () => clearTimeout(timer);
-  }, [dirty, currentBody, fm, folder, fileName, format, uploads, loadState, draftOffer, original, settings.repository]);
+  }, [dirty, currentBody, fm, folder, fileName, format, uploads, loadState, draftOffer, original, settings.repository, pageDraftKey]);
+
+  useEffect(() => {
+    return () => {
+      const current = draftFieldsRef.current;
+      if (current.ready && !current.offer && current.key && current.draft) writeDraft(current.key, current.draft);
+    };
+  }, []);
+
+  const applyFeaturedUpload = useCallback(
+    (upload: PendingUpload, replacedSitePath: string) => {
+      const keyName = imageKeyRef.current;
+      const previous = new Set([replacedSitePath, asString(fmRef.current[keyName])].filter(Boolean));
+      const uploads = uploadsRef.current.filter((item) => !previous.has(item.sitePath) && item.sitePath !== upload.sitePath);
+      uploads.push(upload);
+      const nextFm = { ...fmRef.current, [keyName]: upload.sitePath };
+      fmRef.current = nextFm;
+      setPendingUploads(uploads);
+      setFm(nextFm);
+      const fields = draftFieldsRef.current;
+      if (fields.ready && !fields.offer && fields.key) {
+        const base = fields.draft ?? {
+          savedAt: Date.now(),
+          baseSha: original?.sha ?? null,
+          format,
+          fm: nextFm,
+          folder,
+          fileName,
+          body: getBody(),
+          uploads,
+        };
+        fields.draft = { ...base, savedAt: Date.now(), fm: nextFm, uploads };
+        writeDraft(fields.key, fields.draft);
+      }
+      setSidebarOpen(true);
+    },
+    [fileName, folder, format, getBody, original?.sha, setPendingUploads]
+  );
+
+  useEffect(() => {
+    if (loadState !== "ready") return;
+    return bindImageTarget(pageDraftKey, {
+      mode: () => (navigatingRef.current ? "away" : draftOfferRef.current ? "offer" : "live"),
+      apply: applyFeaturedUpload,
+      updateOffer: (draft) => setDraftOffer(draft),
+    });
+  }, [applyFeaturedUpload, loadState, pageDraftKey]);
 
   useEffect(() => {
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
@@ -463,12 +580,15 @@ function EditorScreen() {
         uploads: used.map((u) => ({ path: u.repoPath, base64: u.dataUrl })),
       });
 
+      const savedKey = draftKey(settings.repository, path);
+      retargetImageJob(draftKey(settings.repository, original?.path ?? null), savedKey);
       writeDraft(draftKey(settings.repository, original?.path ?? null), null);
       const parsed = parseContent(content);
       const savedDir = path.split("/").slice(0, -1).join("/");
       ctxRef.current.dir = savedDir;
       setFolder(savedDir);
       setPendingUploads(uploadsRef.current.filter((u) => !used.includes(u)));
+      retargetDirectionOverride(settings.repository, original?.path ?? null, path);
       setOriginal({ path, sha: data.fileSha, prefix: parsed.prefix, body: parsed.body, normalizedBody: body, fm: parsed.data });
       setOriginalKeys(Object.keys(fm));
       setFileName(effectiveFileName);
@@ -526,6 +646,7 @@ function EditorScreen() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       writeDraft(draftKey(settings.repository, original.path), null);
+      writeDirectionOverride(settings.repository, original.path, null);
       toast(`Deleted ${original.path}`);
       await refresh();
       router.push(backHref);
@@ -540,6 +661,16 @@ function EditorScreen() {
   const section = folder ? sectionOf(path, settings.contentDir) : settings.postsSection;
   const backHref = `/?section=${encodeURIComponent(section)}`;
   const goBack = () => (dirty ? setLeaveOpen(true) : router.push(backHref));
+
+  const toggleDirection = () => {
+    if (loadState !== "ready") return;
+    const sample = `${asString(fm.title)}\n${getBody()}`;
+    const next: TextDirection = direction === "rtl" ? "ltr" : "rtl";
+    const pin = next === pageDirection(sample, directionFallback, null) ? null : next;
+    directionPin.current = pin;
+    writeDirectionOverride(settings.repository, original?.path ?? null, pin);
+    setDirection(next);
+  };
 
   const switchMode = (mode: ViewMode) => {
     if (mode === viewMode) return;
@@ -687,14 +818,31 @@ function EditorScreen() {
       editor?.chain().focus().insertContentAt({ from: span.from, to: span.to }, protectShortcodes(md)).run();
     },
     applySummary: (text) => setField(descriptionKey, text),
-    applyTags: (tags) => setField("tags", tags),
-    applyImage: async (dataUrl) => {
-      const prepared = await prepareImage(fileFromDataUrl(dataUrl, "featured.jpg"), 1920, settings.imagePath);
-      const previous = asString(fm[imageKey]);
-      setPendingUploads([...uploadsRef.current.filter((upload) => upload.sitePath !== previous), prepared]);
-      setField(imageKey, prepared.sitePath);
-      setSidebarOpen(true);
+    applyTags: (incoming) => {
+      const result = mergeTags(fmRef.current.tags, incoming);
+      if (!result.added) return false;
+      setFm((prev) => {
+        const latest = mergeTags(prev.tags, incoming);
+        if (!latest.added) return prev;
+        return { ...prev, tags: latest.tags };
+      });
+      return true;
     },
+    imageJobKey: pageDraftKey,
+    imageLabel: asString(fm.title).trim() || effectiveFileName || "this page",
+    captureDraft: () => ({
+      savedAt: Date.now(),
+      baseSha: original?.sha ?? null,
+      format,
+      fm,
+      folder,
+      fileName,
+      body: getBody(),
+      uploads: uploadsRef.current,
+    }),
+    imageDir: settings.imagePath,
+    imageField: imageKey,
+    currentImagePath: asString(fm[imageKey]),
     updateSettings,
     imageTheme: settings.imageTheme,
     imageTemplate,
@@ -735,7 +883,7 @@ function EditorScreen() {
             <span className="hidden sm:inline-flex shrink-0">
               <Icon name="chevron_right" className="!text-[16px] text-on-surface-variant/60" />
             </span>
-            <span className="truncate font-medium text-on-surface">{asString(fm.title) || (isNew ? "New page" : effectiveFileName)}</span>
+            <span dir="auto" className="truncate font-medium text-on-surface">{asString(fm.title) || (isNew ? "New page" : effectiveFileName)}</span>
           </div>
           {isDraft && <Badge tone="draft">Draft</Badge>}
           {(assist.summaryBusy || assist.imageBusy) && (
@@ -781,6 +929,7 @@ function EditorScreen() {
                 <Icon name="history" />
                 <div className="flex-1">
                   You have unsaved changes from {new Date(draftOffer.savedAt).toLocaleString()}.
+                  {draftOffer.uploads?.some((upload) => upload.sitePath === asString(draftOffer.fm[imageKey])) && " They include a featured image waiting to be saved."}
                   {original && draftOffer.baseSha && draftOffer.baseSha !== original.sha && " The file has changed on GitHub since then."}
                 </div>
                 <div className="flex gap-2">
@@ -808,6 +957,7 @@ function EditorScreen() {
             <textarea
               className="w-full resize-none overflow-hidden bg-transparent font-display text-[32px] sm:text-[40px] font-bold leading-tight tracking-tight text-on-surface placeholder:text-on-surface-variant/40 outline-hidden"
               placeholder="Title"
+              dir={direction}
               rows={1}
               value={asString(fm.title)}
               onChange={(e) => setField("title", e.target.value.replace(/\n/g, " "))}
@@ -835,6 +985,8 @@ function EditorScreen() {
               editor={editor}
               viewMode={viewMode}
               onViewMode={switchMode}
+              direction={direction}
+              onToggleDirection={toggleDirection}
               onImage={() => openPicker("cursor")}
               onImageRow={() => openPicker("row")}
               onLink={openLinkPrompt}
@@ -859,7 +1011,7 @@ function EditorScreen() {
                   </span>
                 </div>
               )}
-              <div className={viewMode === "rich" ? "" : "hidden"}>
+              <div dir={direction} className={viewMode === "rich" ? "editor-writing" : "editor-writing hidden"}>
                 {editor && (
                   <>
                     <BubbleMenu
@@ -867,7 +1019,7 @@ function EditorScreen() {
                       pluginKey="linkMenu"
                       shouldShow={({ editor: e }) => e.isActive("link") && !(e.state.selection instanceof NodeSelection)}
                     >
-                      <div className="flex items-center gap-0.5 rounded-lg border border-outline-variant bg-surface-container-lowest p-1 shadow-lg text-sm">
+                      <div dir="ltr" className="flex items-center gap-0.5 rounded-lg border border-outline-variant bg-surface-container-lowest p-1 shadow-lg text-sm">
                         <a
                           href={editor.getAttributes("link").href}
                           target="_blank"
@@ -891,7 +1043,7 @@ function EditorScreen() {
                         state.selection instanceof NodeSelection && ["image", "imageRow"].includes(state.selection.node.type.name)
                       }
                     >
-                      <div className="flex items-center gap-0.5 rounded-lg border border-outline-variant bg-surface-container-lowest p-1 shadow-lg text-sm">
+                      <div dir="ltr" className="flex items-center gap-0.5 rounded-lg border border-outline-variant bg-surface-container-lowest p-1 shadow-lg text-sm">
                         {editor.isActive("image") && (
                           <button className="btn-ghost !h-7 !px-2" onClick={() => setPrompt({ kind: "alt", value: editor.getAttributes("image").alt ?? "" })}>
                             <Icon name="text_fields" className="!text-[17px]" /> Alt text
@@ -915,6 +1067,7 @@ function EditorScreen() {
               {viewMode === "markdown" && (
                 <textarea
                   ref={textareaRef}
+                  dir={direction}
                   className="w-full min-h-[60vh] resize-none bg-transparent font-mono text-[14px] leading-[1.7] text-on-surface outline-hidden pb-[30vh]"
                   value={markdown}
                   onChange={(e) => {
@@ -939,6 +1092,7 @@ function EditorScreen() {
           setField={setField}
           descriptionKey={descriptionKey}
           imageKey={imageKey}
+          direction={direction}
           showDate={isPostsSection}
           showImage={isPostsSection}
           tagSuggestions={tagSuggestions}
@@ -998,6 +1152,7 @@ function EditorScreen() {
         <input
           className="field"
           autoFocus
+          dir={prompt?.kind === "alt" ? direction : "ltr"}
           value={prompt?.value ?? ""}
           placeholder={prompt?.kind === "alt" ? "Describe the image" : "https://… or /blog/another-post/"}
           onChange={(e) => setPrompt((p) => p && { ...p, value: e.target.value })}

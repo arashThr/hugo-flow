@@ -1,3 +1,4 @@
+import type { TextDirection } from "./editor/direction";
 import type { FrontMatterFormat } from "./frontmatter";
 
 /** A markdown file under the content directory, with the front matter fields the dashboard shows. */
@@ -25,6 +26,8 @@ export interface SiteInfo {
   branch: string;
   baseURL: string | null;
   allowsRawHtml: boolean;
+  /** Writing direction implied by the Hugo config. Pages can still go the other way. */
+  direction: TextDirection;
   configPath: string | null;
   entries: ContentEntry[];
   media: MediaEntry[];

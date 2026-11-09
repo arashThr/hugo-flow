@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useEditorState, type Editor } from "@tiptap/react";
 import { Icon } from "@/components/ui";
+import type { TextDirection } from "@/lib/editor/direction";
 
 export type ViewMode = "rich" | "markdown";
 
@@ -10,6 +11,8 @@ interface Props {
   editor: Editor | null;
   viewMode: ViewMode;
   onViewMode: (mode: ViewMode) => void;
+  direction: TextDirection;
+  onToggleDirection: () => void;
   onImage: () => void;
   onImageRow: () => void;
   onLink: () => void;
@@ -89,7 +92,7 @@ function Btn({ icon, label, onClick, active, disabled, text }: { icon?: string; 
 
 const Sep = () => <div className="w-px h-5 bg-outline-variant mx-1 shrink-0" />;
 
-export function EditorToolbar({ editor, viewMode, onViewMode, onImage, onImageRow, onLink, assistant }: Props) {
+export function EditorToolbar({ editor, viewMode, onViewMode, direction, onToggleDirection, onImage, onImageRow, onLink, assistant }: Props) {
   const state = useEditorState({
     editor,
     selector: ({ editor: e }) =>
@@ -151,6 +154,15 @@ export function EditorToolbar({ editor, viewMode, onViewMode, onImage, onImageRo
         </div>
 
         {assistant && <AssistantMenu assistant={assistant} />}
+
+        <div className="shrink-0 ml-1">
+          <Btn
+            icon={direction === "rtl" ? "format_textdirection_r_to_l" : "format_textdirection_l_to_r"}
+            label={direction === "rtl" ? "Switch to left to right" : "Switch to right to left"}
+            active={direction === "rtl"}
+            onClick={onToggleDirection}
+          />
+        </div>
 
         <div className="segmented shrink-0 ml-1">
           {(["rich", "markdown"] as ViewMode[]).map((mode) => (

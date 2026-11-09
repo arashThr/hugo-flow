@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Icon, Modal, Spinner } from "@/components/ui";
 import { useToast } from "@/components/Toast";
 import type { Settings } from "@/components/SettingsProvider";
@@ -13,6 +13,8 @@ import {
   type AiProvider,
   type AiTextInput,
 } from "@/lib/ai";
+import type { StoredDraft } from "@/lib/drafts";
+import { getEmptyImageJobs, getImageJobs, startFeaturedImageJob, subscribeImageJobs } from "@/lib/editor/image-job";
 
 export interface SelectionSpan {
   text: string;
@@ -38,8 +40,15 @@ interface Options {
   applyBody: (markdown: string) => void;
   applySelection: (span: SelectionSpan, markdown: string) => void;
   applySummary: (text: string) => void;
-  applyTags: (tags: string[]) => void;
-  applyImage: (dataUrl: string) => Promise<void>;
+  /** Merge generated tags into the ones already on the page. Returns whether any tag was new. */
+  applyTags: (tags: string[]) => boolean;
+  /** Draft key for the page this image belongs to. The request keeps running if that page unmounts. */
+  imageJobKey: string;
+  imageLabel: string;
+  captureDraft: () => StoredDraft;
+  imageDir: string;
+  imageField: string;
+  currentImagePath: string;
   updateSettings: (patch: Partial<Settings>) => void;
   imageTheme: string;
   imageTemplate: string;
@@ -62,7 +71,8 @@ export function useWritingAssist(opts: Options) {
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const [busy, setBusy] = useState(false);
   const [summaryBusy, setSummaryBusy] = useState(false);
-  const [imageBusy, setImageBusy] = useState(false);
+  const imageJobs = useSyncExternalStore(subscribeImageJobs, getImageJobs, getEmptyImageJobs);
+  const imageBusy = imageJobs[opts.imageJobKey]?.status === "running";
   const heldSelection = useRef<SelectionSpan | null>(null);
   const alive = useRef(true);
   const imageDraft = useRef<{ summary: string; description: string } | null>(null);
@@ -162,8 +172,8 @@ export function useWritingAssist(opts: Options) {
       const result = await requestText(current, input, opts.textModel);
       if (!alive.current) return;
       opts.applySummary(result.text);
-      if (result.tags?.length) opts.applyTags(result.tags);
-      toast(result.tags?.length ? "Summary and tags added. Save the page to keep it." : "Summary added. Save the page to keep it.");
+      const addedTags = result.tags?.length ? opts.applyTags(result.tags) : false;
+      toast(addedTags ? "Summary and tags added. Save the page to keep it." : "Summary added. Save the page to keep it.");
     } catch (error) {
       if (alive.current) toast((error as Error).message, "error");
     } finally {
@@ -222,23 +232,17 @@ export function useWritingAssist(opts: Options) {
     }
     imageDraft.current = { summary: summaryText, description: trimmed };
     setDialog(null);
-    void runImage(current, prompt, hasTemplate ? opts.imageTemplate : "", opts.imageModel);
-  };
-
-  const runImage = async (current: Creds, prompt: string, template: string, model: string) => {
-    setImageBusy(true);
     opts.onBackgroundStart?.();
-    toast("Generating the featured image. You can keep editing.");
-    try {
-      const dataUrl = await requestImage(current, prompt, template, model);
-      if (!alive.current) return;
-      await opts.applyImage(dataUrl);
-      if (alive.current) toast("Featured image added. It uploads to GitHub when you save.");
-    } catch (error) {
-      if (alive.current) toast((error as Error).message, "error");
-    } finally {
-      if (alive.current) setImageBusy(false);
-    }
+    toast("Generating the featured image. You can leave this page — it will be added to this draft.");
+    startFeaturedImageJob({
+      key: opts.imageJobKey,
+      label: opts.imageLabel,
+      snapshot: opts.captureDraft(),
+      imageKey: opts.imageField,
+      imageDir: opts.imageDir,
+      replacedSitePath: opts.currentImagePath,
+      run: () => requestImage(current, prompt, hasTemplate ? opts.imageTemplate : "", opts.imageModel),
+    });
   };
 
   const continueWithKey = () => {
@@ -280,7 +284,7 @@ export function useWritingAssist(opts: Options) {
     summaryText ? "The summary is filled in as the description." : "No summary yet. What you write here is the description.",
     opts.imageTheme.trim() ? "The theme from Settings is added." : "",
     opts.imageTemplate.startsWith("data:image/") ? "The template image is used as the style." : "",
-    "You can keep writing while it generates.",
+    "You can leave this page. The image is added to this draft when it is ready.",
   ]
     .filter(Boolean)
     .join(" ");
